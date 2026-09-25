@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  credits      Int          @default(60)
+  createdAt    DateTime     @default(now())
+  redemptions  CreditCode[]
+  generations  Generation[]
+}
+
+model CreditCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  credits      Int
+  createdAt    DateTime  @default(now())
+  redeemedAt   DateTime?
+  redeemedById String?
+  redeemedBy   User?     @relation(fields: [redeemedById], references: [id])
+}
+
+model Generation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  style     String
+  count     Int
+  createdAt DateTime @default(now())
+}
