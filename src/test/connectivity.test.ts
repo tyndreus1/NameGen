@@ -94,6 +94,24 @@ describe("one-piece connectivity", () => {
     expect(rejected.components).toBeGreaterThan(1);
   });
 
+  it("fuses floating ü dots and a cedilla into the letter before the one-piece check", () => {
+    const umlaut = blank(140, 90);
+    fillRect(umlaut, 24, 36, 56, 30);
+    fillRect(umlaut, 32, 20, 6, 6);
+    fillRect(umlaut, 52, 20, 6, 6);
+    const fusedDots = repairSmallIslands(umlaut);
+    expect(fusedDots.rejected).toBe(false);
+    expect(fusedDots.dilated + fusedDots.bridged).toBeGreaterThan(0);
+    expect(countComponents(umlaut)).toBe(1);
+
+    const cedilla = blank(140, 90);
+    fillRect(cedilla, 30, 22, 44, 34);
+    fillRect(cedilla, 48, 62, 5, 8);
+    const fusedHook = repairSmallIslands(cedilla);
+    expect(fusedHook.rejected).toBe(false);
+    expect(countComponents(cedilla)).toBe(1);
+  });
+
   it("classifies only pure black as material", () => {
     const width = 2;
     const height = 1;

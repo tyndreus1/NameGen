@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pickReferenceIds, isSameNameAsReference, REFERENCE_CATALOG } from "@/lib/generate/references";
+import {
+  pickReferenceIds,
+  isSameNameAsReference,
+  REFERENCE_CATALOG,
+  referencesForBatch,
+} from "@/lib/generate/references";
 
 describe("reference picking", () => {
   it("never includes a reference with the same name as the target", () => {
@@ -25,5 +30,12 @@ describe("reference picking", () => {
     expect(isSameNameAsReference("MERVE", merve)).toBe(true);
     expect(isSameNameAsReference("merve", merve)).toBe(true);
     expect(isSameNameAsReference("Zeynep", merve)).toBe(false);
+  });
+
+  it("rotates a different single reference per batch", () => {
+    const pool = ["charlotte", "zeynep"];
+    expect(referencesForBatch(pool, 0, 1)).toEqual(["charlotte"]);
+    expect(referencesForBatch(pool, 1, 1)).toEqual(["zeynep"]);
+    expect(referencesForBatch(pool, 0, 0)).toEqual([]);
   });
 });

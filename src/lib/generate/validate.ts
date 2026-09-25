@@ -63,14 +63,7 @@ export async function validateGrokRaster(
     return { ok: false, reason: "empty after threshold", visionCost, visionCostTicks };
   }
 
-  const speckArea = Math.max(16, Math.round((binary.width * binary.height) / 80000));
-  const maxDotArea = Math.max(80, Math.round((binary.width * binary.height) / 8000));
-  const repair = repairSmallIslands(binary, {
-    speckArea,
-    maxDotArea,
-    maxDistance: Math.max(12, Math.round(Math.min(binary.width, binary.height) * 0.04)),
-    bridgeRadius: Math.max(2, Math.round(Math.min(binary.width, binary.height) / 400)),
-  });
+  const repair = repairSmallIslands(binary);
   if (repair.rejected || repair.components !== 1) {
     return { ok: false, reason: `not one piece (components=${repair.components})`, visionCost, visionCostTicks };
   }

@@ -6,31 +6,30 @@ Lazer kesim isim kolyesi / pendant tasarımları üreten bir web uygulaması. M�
 
 **Asıl üretici Grok image-to-image’dir.** Font yolu yalnızca son çare yedektir. Strateji env ile kod değiştirmeden ayarlanır (maliyet: her input referansı da faturalanır; 2.0 + 2 ref ≈ $0.08/görsel).
 
-Varsayılan: `XAI_IMAGE_MODEL=grok-imagine-image-2.0`, `XAI_REF_COUNT=1`, `XAI_RESOLUTION=1k`, `XAI_MAX_RETRIES=2`.
+Varsayılan (canlı maliyet testi): `grok-imagine-image-2.0`, **1 referans**, `quality=low`, **2 istek × n=2** (farklı ref), `1k`. Formül: `n × $0.04 + $0.01` / istek (ref istek başına bir kez). 4 tasarım ≈ **$0.18**. Tek istekte n=4 ≈ $0.17 ama tasarımlar neredeyse aynı.
 
 1. **Grok (birincil)**  
-   İhtiyaç duyulan görseller **tek istekte `n` ile** alınır. Doğrulamayı geçmeyen slot’lar için sonraki tur `n = kalan` olur (`XAI_MAX_RETRIES` ekstra tur, varsayılan 2).
+   Çeşit için `XAI_BATCHES` paralel istek, her biri `XAI_N_PER_BATCH` ve **farklı** stil referansı. Başarısız slot’lar için retry `n = kalan` (`XAI_MAX_RETRIES`, varsayılan 2).
 
-   - `XAI_REF_COUNT=1` veya `2` → `POST https://api.x.ai/v1/images/edits` JSON body (multipart / OpenAI SDK çalışmaz). Tek ref’te `image`, iki ref’te `images[]`.
-   - `XAI_REF_COUNT=0` → `POST https://api.x.ai/v1/images/generations` (text-only). Stil metni [`prompts/style-description.md`](prompts/style-description.md) dosyasındandır; sonradan değiştirilebilir.
+   - `XAI_REF_COUNT=1` (varsayılan) veya `2` → `POST /images/edits` JSON. `quality` **low** pinlenir (edits’in medium’u görsel başı +$0.02).
+   - `XAI_REF_COUNT=0` → text-only `/images/generations` (daha kötü; yalnızca seçenek). Stil metni [`prompts/style-description.md`](prompts/style-description.md). SVG markup prompt’ta işe yaramaz.
 
    ```json
    {
      "model": "grok-imagine-image-2.0",
      "prompt": "...",
      "image": { "url": "data:image/png;base64,...", "type": "image_url" },
+     "quality": "low",
      "aspect_ratio": "5:2",
-     "n": 4,
+     "n": 2,
      "response_format": "b64_json",
      "resolution": "1k"
    }
    ```
 
-   `XAI_RESOLUTION=2k` lazer kalitesi PNG (~3200×1280, daha pahalı). Model: `grok-imagine-image` | `grok-imagine-image-2.0` | `grok-imagine-image-quality`.
+   Referanslar [assets/references/](assets/references/): aynı isim yok; kelebek `sophia.png` içerir.
 
-   Referanslar [assets/references/](assets/references/): hedef isimle aynı ref yok; kelebek stili `sophia.png` içerir. Prompt şablonu `src/lib/generate/prompt.ts`.
-
-   Doğrulama: S/B, ada/cedilla, tek parça, uç halkaları, Grok vision yazım (`XAI_TEXT_MODEL`). Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
+   Doğrulama: S/B; ü noktaları / Ş cedilla yakınsa kısa gövdeyle kaynaştırılır; **sonra** tek-parça kontrolü; uç halkaları; vision yazım. Geçmezse o slot retry. Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
 
 2. **Deterministik font yedeği (son çare)**  
    Tüm retry’ler bitince kalan slot’lar font yoluyla doldurulur ve **Yedek (font)** işaretlenir.
@@ -97,7 +96,7 @@ Gereksinimler: Node.js 20+.
 ```bash
 cp .env.example .env
 # .env içinde CODE_SECRET, SESSION_SECRET, ADMIN_PASSWORD doldurun
-# XAI_API_KEY ve isteğe bağlı XAI_IMAGE_MODEL / XAI_REF_COUNT / XAI_RESOLUTION / XAI_MAX_RETRIES / XAI_TEXT_MODEL
+# XAI_API_KEY ve isteğe bağlı XAI_* (model, ref count, quality, batches, n, resolution, retries)
 
 npm install
 npx prisma db push
@@ -143,8 +142,11 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `XAI_API_KEY` | hayır | xAI / Grok edits + vision API |
 | `XAI_IMAGE_MODEL` | hayır | `grok-imagine-image` / `grok-imagine-image-2.0` / `grok-imagine-image-quality` |
 | `XAI_REF_COUNT` | hayır | `0` text-only, `1` (varsayılan) veya `2` edits |
+| `XAI_QUALITY` | hayır | `low` (varsayılan) / `medium` / `high` — edits’e pinlenir |
+| `XAI_BATCHES` | hayır | Çeşit istek sayısı; varsayılan `2` |
+| `XAI_N_PER_BATCH` | hayır | İstek başına `n`; varsayılan `2` |
 | `XAI_RESOLUTION` | hayır | `1k` (varsayılan) veya `2k` |
-| `XAI_MAX_RETRIES` | hayır | İlk `n` batch’ten sonraki tur sayısı; varsayılan `2` |
+| `XAI_MAX_RETRIES` | hayır | Kalan slot retry turu; varsayılan `2` |
 | `XAI_TEXT_MODEL` | hayır | Yazım kontrolü (vision); varsayılan `grok-4.6` |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.

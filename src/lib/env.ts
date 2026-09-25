@@ -63,3 +63,25 @@ export function getXaiMaxRetries(): number {
   if (!Number.isFinite(n) || n < 0) return 2;
   return Math.min(8, n);
 }
+
+export const XAI_QUALITIES = ["low", "medium", "high"] as const;
+export type XaiQuality = (typeof XAI_QUALITIES)[number];
+
+/** Edits default to medium (+$0.02/image). Pin low unless overridden. */
+export function getXaiQuality(): XaiQuality {
+  const raw = process.env.XAI_QUALITY?.trim().toLowerCase();
+  if (raw === "medium" || raw === "high" || raw === "low") return raw;
+  return "low";
+}
+
+export function getXaiBatches(): number {
+  const n = Number.parseInt(process.env.XAI_BATCHES ?? "", 10);
+  if (!Number.isFinite(n) || n < 1) return 2;
+  return Math.min(8, n);
+}
+
+export function getXaiNPerBatch(): number {
+  const n = Number.parseInt(process.env.XAI_N_PER_BATCH ?? "", 10);
+  if (!Number.isFinite(n) || n < 1) return 2;
+  return Math.min(8, n);
+}

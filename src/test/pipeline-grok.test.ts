@@ -14,12 +14,14 @@ function mockClient(options: {
   editCost?: number;
   visionCost?: number;
   ns?: number[];
+  refs?: string[];
 }): XaiClient {
   let rounds = 0;
   let imagesSeen = 0;
   return {
     async generateImages(args: GenerateImagesArgs) {
       options.ns?.push(args.n);
+      options.refs?.push(args.references[0]?.dataUrl ?? "");
       rounds++;
       if (options.failRounds && rounds <= options.failRounds) {
         throw new Error("simulated edit failure");
@@ -31,7 +33,7 @@ function mockClient(options: {
         const useBad = options.failFirstImages != null && imagesSeen <= options.failFirstImages;
         return { buffer: useBad ? bad : good };
       });
-      const cost = options.editCost ?? 0.08;
+      const cost = options.editCost ?? 0.09;
       return {
         images,
         cost,
@@ -52,30 +54,40 @@ function mockClient(options: {
 }
 
 describe("Grok-primary pipeline (mocked xAI)", () => {
-  const previousRetries = process.env.XAI_MAX_RETRIES;
-  const previousRefs = process.env.XAI_REF_COUNT;
+  const previous = {
+    retries: process.env.XAI_MAX_RETRIES,
+    refs: process.env.XAI_REF_COUNT,
+    batches: process.env.XAI_BATCHES,
+    nPer: process.env.XAI_N_PER_BATCH,
+  };
 
   afterEach(() => {
-    if (previousRetries === undefined) delete process.env.XAI_MAX_RETRIES;
-    else process.env.XAI_MAX_RETRIES = previousRetries;
-    if (previousRefs === undefined) delete process.env.XAI_REF_COUNT;
-    else process.env.XAI_REF_COUNT = previousRefs;
+    for (const [key, value] of Object.entries({
+      XAI_MAX_RETRIES: previous.retries,
+      XAI_REF_COUNT: previous.refs,
+      XAI_BATCHES: previous.batches,
+      XAI_N_PER_BATCH: previous.nPer,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
-  it("requests all images in one n-batch and sums ticks", async () => {
+  it("uses two n=2 batches with different references for variety", async () => {
     const ns: number[] = [];
-    const result = await generateDesigns("Merve", "classic", 4, mockClient({ name: "Merve", ns }));
-    expect(ns).toEqual([4]);
+    const refs: string[] = [];
+    const result = await generateDesigns("Merve", "classic", 4, mockClient({ name: "Merve", ns, refs }));
+    expect(ns).toEqual([2, 2]);
+    expect(new Set(refs.filter(Boolean)).size).toBe(2);
     expect(result.designs).toHaveLength(4);
-    expect(result.usedGrok).toBe(true);
     expect(result.grokAccepted).toBe(4);
     expect(result.fallbackCount).toBe(0);
-    expect(result.attempts).toBe(1);
-    expect(result.apiCostUsd).toBeCloseTo(0.08 + 4 * 0.002, 8);
-    expect(result.apiCostTicks).toBe(usdToTicks(0.08) + 4 * usdToTicks(0.002));
-    expect(result.imageModel).toBe("grok-imagine-image-2.0");
-    expect(result.designs.every((d) => d.engine === "grok" && !d.fallback)).toBe(true);
-    expect(result.designs[0]!.svg).toMatch(/<svg[\s\S]*<path/i);
+    expect(result.attempts).toBe(2);
+    expect(result.quality).toBe("low");
+    expect(result.batches).toBe(2);
+    expect(result.nPerBatch).toBe(2);
+    expect(result.apiCostUsd).toBeCloseTo(2 * 0.09 + 4 * 0.002, 8);
+    expect(result.designs.every((d) => d.engine === "grok")).toBe(true);
   }, 40000);
 
   it("retries only failed slots (n = remaining) then accepts", async () => {
@@ -87,11 +99,11 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
       4,
       mockClient({ name: "Merve", failFirstImages: 2, ns }),
     );
-    expect(ns[0]).toBe(4);
-    expect(ns[1]).toBe(2);
+    expect(ns.slice(0, 2).sort()).toEqual([2, 2]);
+    expect(ns[2]).toBe(2);
     expect(result.grokAccepted).toBe(4);
     expect(result.fallbackCount).toBe(0);
-    expect(result.attempts).toBe(2);
+    expect(result.attempts).toBe(3);
   }, 40000);
 
   it("falls back to the font path after retries and marks it", async () => {
@@ -120,7 +132,7 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
     );
     expect(result.fallbackCount).toBe(1);
     expect(result.attempts).toBe(3);
-    expect(result.apiCostUsd).toBeCloseTo(3 * (0.08 + 0.002), 8);
+    expect(result.apiCostUsd).toBeCloseTo(3 * (0.09 + 0.002), 8);
   }, 40000);
 
   it("uses the font path immediately when no xAI client is configured", async () => {

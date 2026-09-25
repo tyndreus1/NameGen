@@ -1,5 +1,5 @@
 import { usdToTicks } from "../cost";
-import { getXaiApiKey, getXaiImageModel, getXaiResolution, getXaiTextModel } from "../env";
+import { getXaiApiKey, getXaiImageModel, getXaiQuality, getXaiResolution, getXaiTextModel } from "../env";
 
 export const XAI_BASE = "https://api.x.ai/v1";
 
@@ -110,6 +110,7 @@ export function createLiveXaiClient(apiKey: string): XaiClient {
     async generateImages({ prompt, references, n }) {
       const model = getXaiImageModel();
       const resolution = getXaiResolution();
+      const quality = getXaiQuality();
       const count = Math.max(1, Math.round(n));
       const base: Record<string, unknown> = {
         model,
@@ -121,6 +122,10 @@ export function createLiveXaiClient(apiKey: string): XaiClient {
       };
 
       const endpoint = references.length === 0 ? "generations" : "edits";
+      if (endpoint === "edits") {
+        // Edits default to medium (+$0.02/image). Pin low unless env overrides.
+        base.quality = quality;
+      }
       if (references.length === 1) {
         base.image = { url: references[0]!.dataUrl, type: "image_url" };
       } else if (references.length > 1) {

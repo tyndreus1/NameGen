@@ -266,30 +266,74 @@ export type IslandRepair = {
   components: number;
   bridged: number;
   removed: number;
+  dilated: number;
   rejected: boolean;
 };
 
+function isCompactDiacritic(extra: Component, main: Component, maxDotArea: number, image: BinaryImage): boolean {
+  if (extra.area > maxDotArea) return false;
+  if (extra.area > main.area * 0.05) return false;
+  const w = extra.maxX - extra.minX + 1;
+  const h = extra.maxY - extra.minY + 1;
+  const aspect = w / Math.max(1, h);
+  if (aspect < 0.18 || aspect > 5.5) return false;
+  const limit = Math.min(image.width, image.height) * 0.28;
+  return Math.max(w, h) <= limit;
+}
+
 /**
- * Grok-path island handling: drop dust, bridge a close small dot/cedilla,
- * otherwise reject (do not invent long bridges or drop large pieces).
+ * Grow a small island a few pixels toward the letter so ü dots / cedillas
+ * fuse with a short stem instead of a long invented bridge.
+ */
+function dilateToward(
+  image: BinaryImage,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  radius: number,
+  maxSteps: number,
+): void {
+  const dist = Math.hypot(toX - fromX, toY - fromY);
+  const travel = Math.min(dist, maxSteps);
+  const steps = Math.max(1, Math.ceil(travel));
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * (travel / Math.max(dist, 1));
+    paintDisk(image, fromX + (toX - fromX) * t, fromY + (toY - fromY) * t, radius);
+  }
+}
+
+/**
+ * Grok-path island handling: drop dust, fuse close dots/cedillas into the
+ * nearest letter (dilate, then a neat short bridge), then one-piece check.
+ * Far or large leftovers are rejected so the slot can retry.
  */
 export function repairSmallIslands(
   image: BinaryImage,
-  options: { speckArea?: number; maxDotArea?: number; maxDistance?: number; bridgeRadius?: number } = {},
+  options: {
+    speckArea?: number;
+    maxDotArea?: number;
+    maxDistance?: number;
+    bridgeRadius?: number;
+    dilateRadius?: number;
+  } = {},
 ): IslandRepair {
-  const speckArea = options.speckArea ?? 18;
-  const maxDotArea = options.maxDotArea ?? 220;
-  const maxDistance = options.maxDistance ?? Math.max(10, Math.round(Math.min(image.width, image.height) * 0.035));
-  const bridgeRadius = options.bridgeRadius ?? 2;
+  const minDim = Math.min(image.width, image.height);
   let bridged = 0;
   let removed = 0;
+  let dilated = 0;
 
   for (let guard = 0; guard < 12; guard++) {
     const components = findComponents(image);
     if (components.length <= 1) {
-      return { components: components.length, bridged, removed, rejected: false };
+      return { components: components.length, bridged, removed, dilated, rejected: false };
     }
     const main = components[0]!;
+    const speckArea = options.speckArea ?? Math.max(10, Math.round(main.area * 0.00035));
+    const maxDotArea = options.maxDotArea ?? Math.max(220, Math.round(main.area * 0.045));
+    const maxDistance = options.maxDistance ?? Math.max(16, Math.round(minDim * 0.07));
+    const dilateRadius = options.dilateRadius ?? Math.max(2, Math.round(minDim / 180));
+    const bridgeRadius = options.bridgeRadius ?? Math.max(1, Math.round(minDim / 280));
     const mainMask = componentMask(image, main);
     let changed = false;
 
@@ -303,13 +347,17 @@ export function repairSmallIslands(
       }
       const pair = nearestPair(image, mainMask, extraMask);
       const dist = pair ? Math.hypot(pair.ax - pair.bx, pair.ay - pair.by) : Infinity;
-      if (extra.area <= maxDotArea && dist <= maxDistance && pair) {
-        paintBridge(image, pair.ax, pair.ay, pair.bx, pair.by, bridgeRadius);
-        bridged++;
+      if (pair && isCompactDiacritic(extra, main, maxDotArea, image) && dist <= maxDistance) {
+        dilateToward(image, pair.ax, pair.ay, pair.bx, pair.by, dilateRadius, dilateRadius + 1);
+        dilated++;
+        const after = findComponents(image);
+        if (after.length > 1) {
+          paintBridge(image, pair.ax, pair.ay, pair.bx, pair.by, bridgeRadius);
+          bridged++;
+        }
         changed = true;
         continue;
       }
-      return { components: components.length, bridged, removed, rejected: true };
     }
     if (!changed) break;
   }
@@ -319,6 +367,7 @@ export function repairSmallIslands(
     components: leftover.length,
     bridged,
     removed,
+    dilated,
     rejected: leftover.length !== 1,
   };
 }

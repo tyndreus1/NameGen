@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_XAI_IMAGE_MODEL,
   DEFAULT_XAI_TEXT_MODEL,
+  getXaiBatches,
   getXaiImageModel,
   getXaiMaxRetries,
+  getXaiNPerBatch,
+  getXaiQuality,
   getXaiRefCount,
   getXaiResolution,
   getXaiTextModel,
@@ -15,6 +18,9 @@ describe("xAI model env", () => {
   const previousRefs = process.env.XAI_REF_COUNT;
   const previousRes = process.env.XAI_RESOLUTION;
   const previousRetries = process.env.XAI_MAX_RETRIES;
+  const previousQuality = process.env.XAI_QUALITY;
+  const previousBatches = process.env.XAI_BATCHES;
+  const previousNPer = process.env.XAI_N_PER_BATCH;
 
   afterEach(() => {
     if (previousImage === undefined) delete process.env.XAI_IMAGE_MODEL;
@@ -27,6 +33,12 @@ describe("xAI model env", () => {
     else process.env.XAI_RESOLUTION = previousRes;
     if (previousRetries === undefined) delete process.env.XAI_MAX_RETRIES;
     else process.env.XAI_MAX_RETRIES = previousRetries;
+    if (previousQuality === undefined) delete process.env.XAI_QUALITY;
+    else process.env.XAI_QUALITY = previousQuality;
+    if (previousBatches === undefined) delete process.env.XAI_BATCHES;
+    else process.env.XAI_BATCHES = previousBatches;
+    if (previousNPer === undefined) delete process.env.XAI_N_PER_BATCH;
+    else process.env.XAI_N_PER_BATCH = previousNPer;
   });
 
   it("defaults to grok-imagine-image-2.0", () => {
@@ -46,13 +58,19 @@ describe("xAI model env", () => {
     expect(DEFAULT_XAI_TEXT_MODEL).toBe("grok-4.6");
   });
 
-  it("defaults to 1 reference, 1k, 2 retries", () => {
+  it("defaults to 1 reference, 1k, low quality, 2x n=2 batches, 2 retries", () => {
     delete process.env.XAI_REF_COUNT;
     delete process.env.XAI_RESOLUTION;
     delete process.env.XAI_MAX_RETRIES;
+    delete process.env.XAI_QUALITY;
+    delete process.env.XAI_BATCHES;
+    delete process.env.XAI_N_PER_BATCH;
     expect(getXaiRefCount()).toBe(1);
     expect(getXaiResolution()).toBe("1k");
     expect(getXaiMaxRetries()).toBe(2);
+    expect(getXaiQuality()).toBe("low");
+    expect(getXaiBatches()).toBe(2);
+    expect(getXaiNPerBatch()).toBe(2);
   });
 
   it("parses ref count, resolution, and retries from env", () => {

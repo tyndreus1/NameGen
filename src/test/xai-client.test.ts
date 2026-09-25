@@ -58,6 +58,7 @@ describe("xAI client", () => {
     expect(body.model).toBe("grok-imagine-image-2.0");
     expect(body.n).toBe(2);
     expect(body.resolution).toBe("1k");
+    expect(body.quality).toBe("low");
     expect(body.image).toEqual({ url: "data:image/png;base64,aaa", type: "image_url" });
     expect(body.images).toBeUndefined();
   });

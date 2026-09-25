@@ -1,11 +1,19 @@
 import { VARIATION_COUNT, type StyleId } from "../constants";
 import { addTicks } from "../cost";
-import { getXaiImageModel, getXaiMaxRetries, getXaiRefCount, getXaiResolution } from "../env";
+import {
+  getXaiBatches,
+  getXaiImageModel,
+  getXaiMaxRetries,
+  getXaiNPerBatch,
+  getXaiQuality,
+  getXaiRefCount,
+  getXaiResolution,
+} from "../env";
 import { buildVariations, composeNameSvg } from "./vector";
 import { processSvgComposition, type ProcessedDesign } from "./postprocess";
 import { createXaiClient, type XaiClient } from "./xai-client";
 import { buildGenerationPrompt } from "./prompt";
-import { loadPickedReferences } from "./references";
+import { loadPickedReferences, referencesForBatch } from "./references";
 import { validateGrokRaster } from "./validate";
 
 export type GeneratedDesign = ProcessedDesign & {
@@ -26,6 +34,9 @@ export type GenerateResult = {
   imageModel: string | null;
   refCount: number;
   resolution: string | null;
+  quality: string | null;
+  batches: number;
+  nPerBatch: number;
 };
 
 function assertName(name: string): string {
@@ -80,51 +91,89 @@ export async function generateDesigns(
   const grokAttempted = Boolean(resolved);
   const refCount = getXaiRefCount();
   const maxRetries = getXaiMaxRetries();
+  const batches = getXaiBatches();
+  const nPerBatch = getXaiNPerBatch();
+  const quality = getXaiQuality();
 
   const accepted: GeneratedDesign[] = [];
   let attempts = 0;
   let apiCostUsd = 0;
   let apiCostTicks = 0;
+  let batchCursor = 0;
 
   if (resolved) {
     const prompt = buildGenerationPrompt(name, style, refCount);
-    const references = loadPickedReferences(name, style, refCount);
-    const rounds = 1 + maxRetries;
+    const poolSize = refCount === 0 ? 0 : Math.max(refCount, batches);
+    const pool = loadPickedReferences(name, style, poolSize);
 
-    for (let round = 0; round < rounds && accepted.length < count; round++) {
-      const needed = count - accepted.length;
+    const requestBatch = async (n: number) => {
+      const references = referencesForBatch(pool, batchCursor, refCount).map((ref) => ({
+        dataUrl: ref.dataUrl,
+      }));
+      batchCursor++;
       attempts++;
+      return resolved.generateImages({ prompt, references, n });
+    };
+
+    const acceptImages = async (images: { buffer: Buffer }[], visionClient: XaiClient) => {
+      for (const image of images) {
+        if (accepted.length >= count) break;
+        try {
+          const checked = await validateGrokRaster(image.buffer, name, visionClient);
+          apiCostUsd += checked.visionCost;
+          apiCostTicks = addTicks(apiCostTicks, checked.visionCostTicks);
+          if (!checked.ok) continue;
+          accepted.push({
+            png: checked.png,
+            svg: checked.svg,
+            components: 1,
+            source: "grok",
+            index: accepted.length,
+            engine: "grok",
+            fallback: false,
+          });
+        } catch {
+          /* skip this image */
+        }
+      }
+    };
+
+    // Variety phase: parallel small n-batches, each with a different reference.
+    const varietyCount = Math.min(batches, Math.ceil(count / nPerBatch));
+    const varietyNs: number[] = [];
+    let planned = 0;
+    for (let i = 0; i < varietyCount && planned < count; i++) {
+      const n = Math.min(nPerBatch, count - planned);
+      varietyNs.push(n);
+      planned += n;
+    }
+
+    const varietyResults = await Promise.all(
+      varietyNs.map(async (n) => {
+        try {
+          return await requestBatch(n);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const batch of varietyResults) {
+      if (!batch) continue;
+      apiCostUsd += batch.cost;
+      apiCostTicks = addTicks(apiCostTicks, batch.costTicks);
+      await acceptImages(batch.images, resolved);
+    }
+
+    // Retry failed slots only: one request with n = remaining.
+    for (let retry = 0; retry < maxRetries && accepted.length < count; retry++) {
+      const n = count - accepted.length;
       try {
-        const batch = await resolved.generateImages({
-          prompt,
-          references: references.map((ref) => ({ dataUrl: ref.dataUrl })),
-          n: needed,
-        });
+        const batch = await requestBatch(n);
         apiCostUsd += batch.cost;
         apiCostTicks = addTicks(apiCostTicks, batch.costTicks);
-
-        for (const image of batch.images) {
-          if (accepted.length >= count) break;
-          try {
-            const checked = await validateGrokRaster(image.buffer, name, resolved);
-            apiCostUsd += checked.visionCost;
-            apiCostTicks = addTicks(apiCostTicks, checked.visionCostTicks);
-            if (!checked.ok) continue;
-            accepted.push({
-              png: checked.png,
-              svg: checked.svg,
-              components: 1,
-              source: "grok",
-              index: accepted.length,
-              engine: "grok",
-              fallback: false,
-            });
-          } catch {
-            /* skip this image */
-          }
-        }
+        await acceptImages(batch.images, resolved);
       } catch {
-        /* retry remaining slots */
+        /* next retry */
       }
     }
   }
@@ -154,5 +203,8 @@ export async function generateDesigns(
     imageModel: grokAttempted ? getXaiImageModel() : null,
     refCount,
     resolution: grokAttempted ? getXaiResolution() : null,
+    quality: grokAttempted ? quality : null,
+    batches,
+    nPerBatch,
   };
 }

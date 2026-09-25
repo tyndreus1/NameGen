@@ -75,3 +75,12 @@ export function loadPickedReferences(
     dataUrl: loadReferenceDataUrl(id),
   }));
 }
+
+/** One (or two) refs for a batch; rotate through the pool so batches differ. */
+export function referencesForBatch<T>(pool: T[], batchIndex: number, refCount: number): T[] {
+  if (refCount <= 0 || pool.length === 0) return [];
+  if (refCount === 1) return [pool[batchIndex % pool.length]!];
+  const a = pool[batchIndex % pool.length]!;
+  const b = pool[(batchIndex + 1) % pool.length]!;
+  return a === b ? [a] : [a, b];
+}
