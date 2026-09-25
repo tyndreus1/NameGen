@@ -4,15 +4,38 @@ Lazer kesim isim kolyesi / pendant tasarımları üreten bir web uygulaması. M�
 
 ## Yaklaşım
 
-İki yollu **hibrit** üretim:
+**Asıl üretici Grok image-to-image’dir.** Font yolu yalnızca son çare yedektir (canlı 27-görsel testte font tasarımları referansların çok gerisinde kaldı).
 
-1. **Deterministik vektör üretici (her zaman çalışır)**  
-   Paketlenmiş OFL script fontlarıyla (Türkçe glif desteği: ç, ğ, ı, İ, ö, ş, ü) isim path’e çevrilir. Swash, iki uç halkası ve süslemeler (kalp, yıldız, kelebek) prosedürel çizilir, yüksek çözünürlükte rasterize edilir, saf siyah-beyaza çekilir, kopuk adalar köprülenir veya silinir, bağlı bileşen sayısı **1** olana kadar doğrulanır, ardından [potrace](https://potrace.sourceforge.net/) ile temiz SVG’ye izlenir.
+1. **Grok edits (birincil)**  
+   `XAI_API_KEY` varsa her slot `POST https://api.x.ai/v1/images/edits` ile **JSON body** gönderir (multipart / OpenAI SDK `images.edit()` bu endpoint’te çalışmaz):
 
-2. **Grok (xAI) görsel üretimi (isteğe bağlı)**  
-   `XAI_API_KEY` varsa `https://api.x.ai/v1/images/generations` üzerinden `XAI_IMAGE_MODEL` (varsayılan `grok-imagine-image-2.0`; ayrıca `grok-imagine-image`, `grok-imagine-image-quality`) çağrılır. Aynı siyah-beyaz / tek-parça / halka kuralları post-process ile zorlanır. Grok yazımı bozabilir veya ada bırakabilir; doğrulamayı geçmeyen görseller **teslim edilmez**, yerlerine deterministik varyasyon konur.
+   ```json
+   {
+     "model": "grok-imagine-image-2.0",
+     "prompt": "...",
+     "images": [
+       { "url": "data:image/png;base64,...", "type": "image_url" },
+       { "url": "data:image/png;base64,...", "type": "image_url" }
+     ],
+     "aspect_ratio": "5:2",
+     "n": 1,
+     "response_format": "b64_json",
+     "resolution": "2k"
+   }
+   ```
 
-API anahtarı yoksa uygulama tamamen deterministik yolla çalışır (bu ortamda da böyle test edildi).
+   Tek referansta `image` (tekil) kullanılır. **2k** → 3200×1280 PNG (lazer kalitesi, ~$0.10). Varsayılan 1k JPEG’dir; kullanılmaz. Model `XAI_IMAGE_MODEL` ile değişir (varsayılan `grok-imagine-image-2.0`; canlı testte `-quality`’den daha iyi benzerlik).
+
+   Stil için [owner referansları](assets/references/) gönderilir: istek başına **2** görsel, hedef isimle aynı referans asla yok; kelebek stili `sophia.png` içerir. Prompt şablonu ve süsleme cümleleri `src/lib/generate/prompt.ts` içinde; denenen her prompt `assets/references/prompts.md` dosyasında.
+
+   Her görsel doğrulanır: saf S/B eşik, toz silme / yakın kopuk nokta-cedilla köprüleme (uzak ada → red), bağlı bileşen **1**, solda ve sağda **kapalı** halka + iç delik (spiral boşluk halka sayılmaz), yazım kontrolü Grok vision (`XAI_TEXT_MODEL`, varsayılan `grok-4.6`) ile. Başarısız slot **3 kez** denenir; 4 alternatif **paralel** üretilir. 2k B/W sonuç [potrace](https://potrace.sourceforge.net/) ile SVG’ye izlenir.
+
+2. **Deterministik font yedeği (son çare)**  
+   Slot’un 3 denemesi de başarısızsa (veya anahtar yoksa) OFL script font + prosedürel swash/halka/süsleme kullanılır ve sonuç **Yedek (font)** olarak işaretlenir.
+
+Anahtar yoksa uygulama font yoluyla çalışır. Bu ortamda xAI anahtarı yok; birim testler istemciyi mock’lar. Canlı Grok testi owner tarafında çalıştırılmalı.
+
+`/admin` her üretimin xAI `cost` toplamını listeler (müşteri başı API harcaması). Kredi ücreti değişmez: **4 tasarım = 3 kredi**; hiç çıktı yoksa iade.
 
 Her teslim edilen tasarım:
 
@@ -35,7 +58,9 @@ Her üretim **4 alternatif** döner.
 
 ## Örnek çıktılar
 
-Deterministik üreticiden (xAI anahtarı olmadan) üretilmiş örnekler: [`docs/samples/`](docs/samples/). Adlandırma: `{isim}_{stil}.png` (`klasik`, `kalpli`, `yildizli`, `kelebekli`, `zarif`). Vektör örnek: [`docs/samples/merve_kalpli.svg`](docs/samples/merve_kalpli.svg).
+Hedef kalite, owner’ın canlı Grok edits sonuçlarıdır (Latin isimler 17/17 doğru ve tek parça). Owner referansları: [`assets/references/`](assets/references/).
+
+Aşağıdaki galeri **yedek font** üreticisinden (anahtar olmadan) gelir; asıl ürün kalitesi Grok i2i’dir. [`docs/samples/`](docs/samples/). Adlandırma: `{isim}_{stil}.png`. Vektör örnek: [`docs/samples/merve_kalpli.svg`](docs/samples/merve_kalpli.svg).
 
 | | Klasik | Kalpli | Yıldızlı | Kelebekli | Zarif |
 |---|---|---|---|---|---|
@@ -72,7 +97,7 @@ Gereksinimler: Node.js 20+.
 ```bash
 cp .env.example .env
 # .env içinde CODE_SECRET, SESSION_SECRET, ADMIN_PASSWORD doldurun
-# XAI_API_KEY ve isteğe bağlı XAI_IMAGE_MODEL
+# XAI_API_KEY, isteğe bağlı XAI_IMAGE_MODEL ve XAI_TEXT_MODEL
 
 npm install
 npx prisma db push
@@ -98,7 +123,7 @@ Veya `/admin` sayfasından `ADMIN_PASSWORD` ile giriş yapıp kod üretin.
 npm test
 ```
 
-Kapsam: kod imzalama/doğrulama, tek kullanımlık (eşzamanlı çift kullanım dahil), kredi düşümü, tek-parça bağlılık, örnek isim üretimi (Merve, Şükrü).
+Kapsam: kod imzalama/doğrulama, tek kullanımlık (eşzamanlı çift kullanım dahil), kredi düşümü, tek-parça bağlılık, Grok prompt/referans/halka/ada doğrulama, mock’lu edits istemcisi ve pipeline (3 deneme + font yedeği), örnek isim üretimi (Merve, Şükrü). xAI anahtarı testlerde kullanılmaz.
 
 Örnek tasarımları diske yazmak:
 
@@ -115,8 +140,9 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `CODE_SECRET` | evet | Kod HMAC sırrı |
 | `SESSION_SECRET` | evet | Oturum JWT sırrı |
 | `ADMIN_PASSWORD` | evet | `/admin` şifresi |
-| `XAI_API_KEY` | hayır | xAI / Grok image API |
-| `XAI_IMAGE_MODEL` | hayır | Image model adı; varsayılan `grok-imagine-image-2.0` |
+| `XAI_API_KEY` | hayır | xAI / Grok edits + vision API |
+| `XAI_IMAGE_MODEL` | hayır | Image model; varsayılan `grok-imagine-image-2.0` |
+| `XAI_TEXT_MODEL` | hayır | Yazım kontrolü (vision); varsayılan `grok-4.6` |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.
 
@@ -129,7 +155,7 @@ Next.js App Router. [Netlify](https://www.netlify.com/) için `netlify.toml` haz
 - `DATABASE_URL` için kalıcı bir Postgres (veya Turso/libSQL) kullanın, **veya**
 - tek instance + kalıcı disk (Fly, Railway, VPS) üzerinde SQLite dosyasını tutun.
 
-Netlify UI’da aynı env değişkenlerini tanımlayın. `XAI_API_KEY` yoksa Grok atlanır.
+Netlify UI’da aynı env değişkenlerini tanımlayın. `XAI_API_KEY` yoksa Grok atlanır ve font yedeği kullanılır. `maxDuration` üretim rotasında 120s (4 × 2k edits + retry).
 
 Yerel üretim derlemesi:
 

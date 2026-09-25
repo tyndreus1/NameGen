@@ -29,3 +29,10 @@ export function getXaiImageModel(): string {
   const model = process.env.XAI_IMAGE_MODEL?.trim();
   return model || DEFAULT_XAI_IMAGE_MODEL;
 }
+
+export const DEFAULT_XAI_TEXT_MODEL = "grok-4.6";
+
+export function getXaiTextModel(): string {
+  const model = process.env.XAI_TEXT_MODEL?.trim();
+  return model || DEFAULT_XAI_TEXT_MODEL;
+}

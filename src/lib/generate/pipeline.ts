@@ -1,12 +1,18 @@
 import { VARIATION_COUNT, type StyleId } from "../constants";
+import { getXaiImageModel } from "../env";
 import { buildVariations, composeNameSvg } from "./vector";
-import { generateGrokImages, tryProcessGrokImage } from "./grok";
 import { processSvgComposition, type ProcessedDesign } from "./postprocess";
-import { getXaiApiKey } from "../env";
+import { createXaiClient, type XaiClient } from "./xai-client";
+import { buildEditPrompt } from "./prompt";
+import { loadPickedReferences } from "./references";
+import { validateGrokRaster } from "./validate";
+
+const SLOT_RETRIES = 3;
 
 export type GeneratedDesign = ProcessedDesign & {
   index: number;
   engine: "deterministic" | "grok";
+  fallback?: boolean;
 };
 
 export type GenerateResult = {
@@ -14,6 +20,10 @@ export type GenerateResult = {
   usedGrok: boolean;
   grokAttempted: boolean;
   grokAccepted: number;
+  fallbackCount: number;
+  attempts: number;
+  apiCostUsd: number;
+  imageModel: string | null;
 };
 
 function assertName(name: string): string {
@@ -30,7 +40,7 @@ function assertName(name: string): string {
   return trimmed;
 }
 
-async function deterministicDesign(
+export async function deterministicDesign(
   name: string,
   style: StyleId,
   index: number,
@@ -43,53 +53,87 @@ async function deterministicDesign(
     composition.rings,
     composition.width,
   );
-  return { ...processed, index, engine: "deterministic" };
+  return { ...processed, index, engine: "deterministic", fallback: true };
+}
+
+async function fillSlot(
+  name: string,
+  style: StyleId,
+  index: number,
+  client: XaiClient | null,
+): Promise<{ design: GeneratedDesign; attempts: number; cost: number }> {
+  let attempts = 0;
+  let cost = 0;
+  if (client) {
+    const prompt = buildEditPrompt(name, style);
+    const references = loadPickedReferences(name, style);
+    for (let tryIndex = 0; tryIndex < SLOT_RETRIES; tryIndex++) {
+      attempts++;
+      try {
+        const edited = await client.editImage({
+          prompt,
+          references: references.map((ref) => ({ dataUrl: ref.dataUrl })),
+        });
+        cost += edited.cost;
+        const checked = await validateGrokRaster(edited.buffer, name, client);
+        cost += checked.visionCost;
+        if (checked.ok) {
+          return {
+            design: {
+              png: checked.png,
+              svg: checked.svg,
+              components: 1,
+              source: "grok",
+              index,
+              engine: "grok",
+              fallback: false,
+            },
+            attempts,
+            cost,
+          };
+        }
+      } catch {
+        /* retry */
+      }
+    }
+  }
+
+  const fallback = await deterministicDesign(name, style, index);
+  return { design: fallback, attempts, cost };
 }
 
 export async function generateDesigns(
   rawName: string,
   style: StyleId,
   count = VARIATION_COUNT,
+  client: XaiClient | null | undefined = undefined,
 ): Promise<GenerateResult> {
   const name = assertName(rawName);
-  const designs: GeneratedDesign[] = [];
-  let grokAttempted = false;
-  let grokAccepted = 0;
+  const resolved = client === undefined ? createXaiClient() : client;
+  const grokAttempted = Boolean(resolved);
 
-  const apiKey = getXaiApiKey();
-  if (apiKey) {
-    grokAttempted = true;
-    try {
-      const images = await generateGrokImages(name, style, count);
-      for (const [i, image] of images.entries()) {
-        const processed = await tryProcessGrokImage(image);
-        if (processed) {
-          designs.push({ ...processed, index: i, engine: "grok" });
-          grokAccepted++;
-        }
-      }
-    } catch {
-      // Fall through to the deterministic generator. Never fail the request
-      // just because Grok is unavailable — spelling/connectivity must still hold.
-    }
-  }
+  const slots = await Promise.all(
+    Array.from({ length: count }, (_, index) => fillSlot(name, style, index, resolved)),
+  );
 
-  let slot = 0;
-  while (designs.length < count) {
-    const generated = await deterministicDesign(name, style, slot % count);
-    generated.index = designs.length;
-    designs.push(generated);
-    slot++;
-  }
+  const designs = slots.map((slot) => slot.design);
+  const grokAccepted = designs.filter((d) => d.engine === "grok").length;
+  const fallbackCount = designs.filter((d) => d.engine !== "grok").length;
+  const attempts = slots.reduce((sum, slot) => sum + slot.attempts, 0);
+  const apiCostUsd = slots.reduce((sum, slot) => sum + slot.cost, 0);
 
   if (designs.length === 0) {
     throw new Error("Tasarım üretilemedi");
   }
 
   return {
-    designs: designs.slice(0, count),
+    designs,
     usedGrok: grokAccepted > 0,
     grokAttempted,
     grokAccepted,
+    fallbackCount,
+    attempts,
+    apiCostUsd,
+    imageModel: grokAttempted ? getXaiImageModel() : null,
   };
 }

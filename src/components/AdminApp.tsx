@@ -12,6 +12,19 @@ type CodeRow = {
   redeemedBy: string | null;
 };
 
+type GenerationRow = {
+  id: string;
+  email: string;
+  name: string;
+  style: string;
+  grokAccepted: number;
+  fallbackCount: number;
+  attempts: number;
+  apiCostUsd: number;
+  imageModel: string | null;
+  createdAt: string;
+};
+
 export function AdminApp({ unlocked }: { unlocked: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +32,8 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
   const [count, setCount] = useState(1);
   const [codes, setCodes] = useState<CodeRow[]>([]);
   const [created, setCreated] = useState<string[]>([]);
+  const [generations, setGenerations] = useState<GenerationRow[]>([]);
+  const [totalCost, setTotalCost] = useState(0);
 
   async function loadCodes() {
     const response = await fetch("/api/admin/codes");
@@ -27,9 +42,18 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
     setCodes(data.codes);
   }
 
+  async function loadGenerations() {
+    const response = await fetch("/api/admin/generations");
+    if (!response.ok) return;
+    const data = await response.json();
+    setGenerations(data.generations);
+    setTotalCost(data.totalCost ?? 0);
+  }
+
   useEffect(() => {
     if (unlocked) {
       void loadCodes();
+      void loadGenerations();
     }
   }, [unlocked]);
 
@@ -148,6 +172,45 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
           </div>
         ) : null}
       </form>
+
+      <section className="panel" style={{ marginTop: 18 }}>
+        <h2>API harcaması</h2>
+        <p className="hint">
+          Son üretimlerin xAI maliyeti (yanıttaki cost alanı). Toplam görünen: ${totalCost.toFixed(4)}
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Zaman</th>
+                <th>Kullanıcı</th>
+                <th>İsim</th>
+                <th>Stil</th>
+                <th>Grok / yedek</th>
+                <th>Deneme</th>
+                <th>Model</th>
+                <th>Maliyet</th>
+              </tr>
+            </thead>
+            <tbody>
+              {generations.map((row) => (
+                <tr key={row.id}>
+                  <td>{new Date(row.createdAt).toLocaleString("tr-TR")}</td>
+                  <td>{row.email}</td>
+                  <td>{row.name}</td>
+                  <td>{row.style}</td>
+                  <td>
+                    {row.grokAccepted}/{row.fallbackCount}
+                  </td>
+                  <td>{row.attempts}</td>
+                  <td>{row.imageModel ?? "—"}</td>
+                  <td>${row.apiCostUsd.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="panel" style={{ marginTop: 18 }}>
         <h2>Üretilen / kullanılan kodlar</h2>

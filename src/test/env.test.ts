@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_XAI_IMAGE_MODEL, getXaiImageModel } from "@/lib/env";
+import {
+  DEFAULT_XAI_IMAGE_MODEL,
+  DEFAULT_XAI_TEXT_MODEL,
+  getXaiImageModel,
+  getXaiTextModel,
+} from "@/lib/env";
 
-describe("XAI_IMAGE_MODEL", () => {
-  const previous = process.env.XAI_IMAGE_MODEL;
+describe("xAI model env", () => {
+  const previousImage = process.env.XAI_IMAGE_MODEL;
+  const previousText = process.env.XAI_TEXT_MODEL;
 
   afterEach(() => {
-    if (previous === undefined) delete process.env.XAI_IMAGE_MODEL;
-    else process.env.XAI_IMAGE_MODEL = previous;
+    if (previousImage === undefined) delete process.env.XAI_IMAGE_MODEL;
+    else process.env.XAI_IMAGE_MODEL = previousImage;
+    if (previousText === undefined) delete process.env.XAI_TEXT_MODEL;
+    else process.env.XAI_TEXT_MODEL = previousText;
   });
 
   it("defaults to grok-imagine-image-2.0", () => {
@@ -18,5 +26,11 @@ describe("XAI_IMAGE_MODEL", () => {
   it("uses the env override when set", () => {
     process.env.XAI_IMAGE_MODEL = "grok-imagine-image-quality";
     expect(getXaiImageModel()).toBe("grok-imagine-image-quality");
+  });
+
+  it("defaults the vision/text model to grok-4.6", () => {
+    delete process.env.XAI_TEXT_MODEL;
+    expect(getXaiTextModel()).toBe("grok-4.6");
+    expect(DEFAULT_XAI_TEXT_MODEL).toBe("grok-4.6");
   });
 });

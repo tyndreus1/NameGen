@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   binaryFromRgba,
   countComponents,
+  repairSmallIslands,
   unifyToSinglePiece,
   type BinaryImage,
 } from "@/lib/generate/connectivity";
@@ -56,6 +57,41 @@ describe("one-piece connectivity", () => {
     ring(image, 25, 25, 16, 8);
     expect(countComponents(image)).toBe(1);
     expect(unifyToSinglePiece(image)).toBe(1);
+  });
+
+  it("drops dust, bridges a close small dot, and rejects a far island", () => {
+    const dust = blank(80, 40);
+    fillRect(dust, 4, 8, 40, 20);
+    dust.data[2] = 1;
+    const dusted = repairSmallIslands(dust, { speckArea: 4, maxDotArea: 20, maxDistance: 8, bridgeRadius: 2 });
+    expect(dusted.rejected).toBe(false);
+    expect(dusted.removed).toBeGreaterThan(0);
+    expect(dusted.components).toBe(1);
+
+    const close = blank(80, 40);
+    fillRect(close, 4, 10, 30, 16);
+    fillRect(close, 40, 14, 4, 4);
+    const bridged = repairSmallIslands(close, {
+      speckArea: 2,
+      maxDotArea: 30,
+      maxDistance: 10,
+      bridgeRadius: 2,
+    });
+    expect(bridged.rejected).toBe(false);
+    expect(bridged.bridged).toBeGreaterThan(0);
+    expect(countComponents(close)).toBe(1);
+
+    const far = blank(120, 40);
+    fillRect(far, 4, 10, 30, 16);
+    fillRect(far, 90, 10, 16, 16);
+    const rejected = repairSmallIslands(far, {
+      speckArea: 4,
+      maxDotArea: 40,
+      maxDistance: 8,
+      bridgeRadius: 2,
+    });
+    expect(rejected.rejected).toBe(true);
+    expect(rejected.components).toBeGreaterThan(1);
   });
 
   it("classifies only pure black as material", () => {

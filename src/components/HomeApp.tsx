@@ -7,6 +7,7 @@ type User = { id: string; email: string; credits: number } | null;
 type Design = {
   index: number;
   engine: "deterministic" | "grok";
+  fallback?: boolean;
   png: string;
   svg: string;
 };
@@ -45,8 +46,10 @@ export function HomeApp({ user }: { user: User }) {
       setDesigns(data.designs);
       setMessage(
         data.usedGrok
-          ? "Grok görselleri doğrulanıp tek parça haline getirildi."
-          : "Deterministik vektör üretici kullanıldı (doğru yazım + tek parça).",
+          ? `Grok image-to-image: ${data.grokAccepted} tasarım doğrulandı${
+              data.fallbackCount ? `, ${data.fallbackCount} yedek font` : ""
+            }.${typeof data.apiCostUsd === "number" ? ` API ~$${Number(data.apiCostUsd).toFixed(3)}` : ""}`
+          : "xAI anahtarı yok veya Grok doğrulamayı geçemedi; yedek font üretici kullanıldı.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Üretim başarısız");
@@ -187,7 +190,7 @@ export function HomeApp({ user }: { user: User }) {
                 />
                 <div className="design-meta">
                   <span className="hint" style={{ margin: 0 }}>
-                    #{design.index + 1} · {design.engine === "grok" ? "Grok + doğrulama" : "Vektör"}
+                    #{design.index + 1} · {design.engine === "grok" ? "Grok" : "Yedek (font)"}
                   </span>
                   <div className="downloads">
                     <a
@@ -213,8 +216,9 @@ export function HomeApp({ user }: { user: User }) {
       ) : null}
 
       <p className="footer">
-        Çıktılar tek bağlı siyah parça olacak şekilde kontrol edilir. Kopuk adalar birleştirilir
-        veya silinir; aksi halde tasarım teslim edilmez.
+        Asıl üretici Grok image-to-image’dir; font yolu yalnızca doğrulama 3 denemede
+        başarısız olursa yedek olarak kullanılır. Teslim edilen her tasarım tek bağlı siyah
+        parçadır.
       </p>
     </div>
   );

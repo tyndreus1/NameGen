@@ -11,7 +11,7 @@ const schema = z.object({
   style: z.enum(STYLES),
 });
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -34,6 +34,11 @@ export async function POST(request: Request) {
         name: parsed.data.name.normalize("NFC").trim(),
         style: parsed.data.style,
         count: result.designs.length,
+        grokAccepted: result.grokAccepted,
+        fallbackCount: result.fallbackCount,
+        attempts: result.attempts,
+        apiCostUsd: result.apiCostUsd,
+        imageModel: result.imageModel,
       },
     });
 
@@ -42,9 +47,13 @@ export async function POST(request: Request) {
       cost: GENERATION_COST,
       usedGrok: result.usedGrok,
       grokAttempted: result.grokAttempted,
+      grokAccepted: result.grokAccepted,
+      fallbackCount: result.fallbackCount,
+      apiCostUsd: result.apiCostUsd,
       designs: result.designs.map((design) => ({
         index: design.index,
         engine: design.engine,
+        fallback: Boolean(design.fallback),
         components: design.components,
         png: design.png.toString("base64"),
         svg: design.svg,

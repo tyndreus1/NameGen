@@ -262,6 +262,67 @@ function keepLargestOnly(image: BinaryImage): number {
   return 1;
 }
 
+export type IslandRepair = {
+  components: number;
+  bridged: number;
+  removed: number;
+  rejected: boolean;
+};
+
+/**
+ * Grok-path island handling: drop dust, bridge a close small dot/cedilla,
+ * otherwise reject (do not invent long bridges or drop large pieces).
+ */
+export function repairSmallIslands(
+  image: BinaryImage,
+  options: { speckArea?: number; maxDotArea?: number; maxDistance?: number; bridgeRadius?: number } = {},
+): IslandRepair {
+  const speckArea = options.speckArea ?? 18;
+  const maxDotArea = options.maxDotArea ?? 220;
+  const maxDistance = options.maxDistance ?? Math.max(10, Math.round(Math.min(image.width, image.height) * 0.035));
+  const bridgeRadius = options.bridgeRadius ?? 2;
+  let bridged = 0;
+  let removed = 0;
+
+  for (let guard = 0; guard < 12; guard++) {
+    const components = findComponents(image);
+    if (components.length <= 1) {
+      return { components: components.length, bridged, removed, rejected: false };
+    }
+    const main = components[0]!;
+    const mainMask = componentMask(image, main);
+    let changed = false;
+
+    for (const extra of components.slice(1)) {
+      const extraMask = componentMask(image, extra);
+      if (extra.area < speckArea) {
+        eraseComponent(image, extraMask);
+        removed++;
+        changed = true;
+        continue;
+      }
+      const pair = nearestPair(image, mainMask, extraMask);
+      const dist = pair ? Math.hypot(pair.ax - pair.bx, pair.ay - pair.by) : Infinity;
+      if (extra.area <= maxDotArea && dist <= maxDistance && pair) {
+        paintBridge(image, pair.ax, pair.ay, pair.bx, pair.by, bridgeRadius);
+        bridged++;
+        changed = true;
+        continue;
+      }
+      return { components: components.length, bridged, removed, rejected: true };
+    }
+    if (!changed) break;
+  }
+
+  const leftover = findComponents(image);
+  return {
+    components: leftover.length,
+    bridged,
+    removed,
+    rejected: leftover.length !== 1,
+  };
+}
+
 export function unifyToSinglePiece(image: BinaryImage, options: UnifyOptions = {}): number {
   const minKeepArea = options.minKeepArea ?? 18;
   const bridgeRadius = options.bridgeRadius ?? 3;
