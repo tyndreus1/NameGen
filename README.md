@@ -33,6 +33,28 @@ Her teslim edilen tasarım:
 
 Her üretim **4 alternatif** döner.
 
+## Örnek çıktılar
+
+Deterministik üreticiden (xAI anahtarı olmadan) üretilmiş örnekler: [`docs/samples/`](docs/samples/). Adlandırma: `{isim}_{stil}.png` (`klasik`, `kalpli`, `yildizli`, `kelebekli`, `zarif`). Vektör örnek: [`docs/samples/merve_kalpli.svg`](docs/samples/merve_kalpli.svg).
+
+| | Klasik | Kalpli | Yıldızlı | Kelebekli | Zarif |
+|---|---|---|---|---|---|
+| Merve | ![](docs/samples/merve_klasik.png) | ![](docs/samples/merve_kalpli.png) | ![](docs/samples/merve_yildizli.png) | ![](docs/samples/merve_kelebekli.png) | ![](docs/samples/merve_zarif.png) |
+| Zeynep | ![](docs/samples/zeynep_klasik.png) | ![](docs/samples/zeynep_kalpli.png) | ![](docs/samples/zeynep_yildizli.png) | ![](docs/samples/zeynep_kelebekli.png) | ![](docs/samples/zeynep_zarif.png) |
+| Aleyna | ![](docs/samples/aleyna_klasik.png) | ![](docs/samples/aleyna_kalpli.png) | ![](docs/samples/aleyna_yildizli.png) | ![](docs/samples/aleyna_kelebekli.png) | ![](docs/samples/aleyna_zarif.png) |
+| Sophia | ![](docs/samples/sophia_klasik.png) | ![](docs/samples/sophia_kalpli.png) | ![](docs/samples/sophia_yildizli.png) | ![](docs/samples/sophia_kelebekli.png) | ![](docs/samples/sophia_zarif.png) |
+| Şükrü | ![](docs/samples/sukru_klasik.png) | ![](docs/samples/sukru_kalpli.png) | ![](docs/samples/sukru_yildizli.png) | ![](docs/samples/sukru_kelebekli.png) | ![](docs/samples/sukru_zarif.png) |
+
+Ana ekranlar:
+
+| Ana sayfa | Sonuçlar |
+|---|---|
+| ![](docs/samples/ui_home.png) | ![](docs/samples/ui_results.png) |
+| **Admin kod** | **Kod yükleme** |
+| ![](docs/samples/ui_admin.png) | ![](docs/samples/ui_redeem.png) |
+
+Aynı seti yeniden üretmek için: `npx tsx scripts/write-docs-samples.ts`
+
 ## Kredi sistemi
 
 - Yeni hesap: **60** kredi
@@ -81,6 +103,7 @@ Kapsam: kod imzalama/doğrulama, tek kullanımlık (eşzamanlı çift kullanım 
 Örnek tasarımları diske yazmak:
 
 ```bash
+npx tsx scripts/write-docs-samples.ts
 npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 ```
 
