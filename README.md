@@ -10,7 +10,7 @@ Lazer kesim isim kolyesi / pendant tasarımları üreten bir web uygulaması. M�
    Paketlenmiş OFL script fontlarıyla (Türkçe glif desteği: ç, ğ, ı, İ, ö, ş, ü) isim path’e çevrilir. Swash, iki uç halkası ve süslemeler (kalp, yıldız, kelebek) prosedürel çizilir, yüksek çözünürlükte rasterize edilir, saf siyah-beyaza çekilir, kopuk adalar köprülenir veya silinir, bağlı bileşen sayısı **1** olana kadar doğrulanır, ardından [potrace](https://potrace.sourceforge.net/) ile temiz SVG’ye izlenir.
 
 2. **Grok (xAI) görsel üretimi (isteğe bağlı)**  
-   `XAI_API_KEY` varsa `https://api.x.ai/v1/images/generations` üzerinden `grok-imagine-image-2.0` modeli çağrılır. Aynı siyah-beyaz / tek-parça / halka kuralları post-process ile zorlanır. Grok yazımı bozabilir veya ada bırakabilir; doğrulamayı geçmeyen görseller **teslim edilmez**, yerlerine deterministik varyasyon konur.
+   `XAI_API_KEY` varsa `https://api.x.ai/v1/images/generations` üzerinden `XAI_IMAGE_MODEL` (varsayılan `grok-imagine-image-2.0`; ayrıca `grok-imagine-image`, `grok-imagine-image-quality`) çağrılır. Aynı siyah-beyaz / tek-parça / halka kuralları post-process ile zorlanır. Grok yazımı bozabilir veya ada bırakabilir; doğrulamayı geçmeyen görseller **teslim edilmez**, yerlerine deterministik varyasyon konur.
 
 API anahtarı yoksa uygulama tamamen deterministik yolla çalışır (bu ortamda da böyle test edildi).
 
@@ -50,7 +50,7 @@ Gereksinimler: Node.js 20+.
 ```bash
 cp .env.example .env
 # .env içinde CODE_SECRET, SESSION_SECRET, ADMIN_PASSWORD doldurun
-# XAI_API_KEY isteğe bağlı
+# XAI_API_KEY ve isteğe bağlı XAI_IMAGE_MODEL
 
 npm install
 npx prisma db push
@@ -93,6 +93,7 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `SESSION_SECRET` | evet | Oturum JWT sırrı |
 | `ADMIN_PASSWORD` | evet | `/admin` şifresi |
 | `XAI_API_KEY` | hayır | xAI / Grok image API |
+| `XAI_IMAGE_MODEL` | hayır | Image model adı; varsayılan `grok-imagine-image-2.0` |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.
 

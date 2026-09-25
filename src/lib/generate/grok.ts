@@ -1,9 +1,8 @@
-import { getXaiApiKey } from "../env";
+import { getXaiApiKey, getXaiImageModel } from "../env";
 import type { StyleId } from "../constants";
 import { processRaster, type ProcessedDesign } from "./postprocess";
 
 const XAI_BASE = "https://api.x.ai/v1";
-const XAI_MODEL = "grok-imagine-image-2.0";
 
 const STYLE_HINT: Record<StyleId, string> = {
   classic:
@@ -56,7 +55,7 @@ export async function generateGrokImages(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: XAI_MODEL,
+      model: getXaiImageModel(),
       prompt,
       n: count,
       response_format: "b64_json",
