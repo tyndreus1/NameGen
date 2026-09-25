@@ -85,3 +85,8 @@ export function getXaiNPerBatch(): number {
   if (!Number.isFinite(n) || n < 1) return 2;
   return Math.min(8, n);
 }
+
+export function getReferenceStorageDir(): string {
+  const raw = process.env.REFERENCE_STORAGE_DIR?.trim();
+  return raw || "data/references";
+}

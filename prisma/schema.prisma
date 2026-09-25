@@ -42,3 +42,47 @@ model Generation {
   imageModel    String?
   createdAt     DateTime @default(now())
 }
+
+model Category {
+  id          String               @id @default(cuid())
+  slug        String               @unique
+  label       String
+  description String               @default("")
+  promptText  String
+  enabled     Boolean              @default(true)
+  sortOrder   Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  references  CategoryReference[]
+}
+
+model StyleReference {
+  id          String               @id @default(cuid())
+  filename    String
+  writtenName String?
+  enabled     Boolean              @default(true)
+  onePiece    Boolean              @default(true)
+  warning     String?
+  createdAt   DateTime             @default(now())
+  categories  CategoryReference[]
+}
+
+model CategoryReference {
+  categoryId  String
+  referenceId String
+  category    Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  reference   StyleReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, referenceId])
+}
+
+model AppSettings {
+  id         String   @id
+  imageModel String?
+  quality    String?
+  refCount   Int?
+  batches    Int?
+  nPerBatch  Int?
+  resolution String?
+  maxRetries Int?
+  updatedAt  DateTime @updatedAt
+}

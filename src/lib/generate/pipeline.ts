@@ -1,20 +1,15 @@
-import { VARIATION_COUNT, type StyleId } from "../constants";
+import { VARIATION_COUNT, fontStyleForSlug, type StyleId } from "../constants";
 import { addTicks } from "../cost";
-import {
-  getXaiBatches,
-  getXaiImageModel,
-  getXaiMaxRetries,
-  getXaiNPerBatch,
-  getXaiQuality,
-  getXaiRefCount,
-  getXaiResolution,
-} from "../env";
+import { loadCategoryRefs } from "../catalog/refs";
+import { resolveGenerationSettings, type ResolvedSettings } from "../catalog/settings";
 import { buildVariations, composeNameSvg } from "./vector";
 import { processSvgComposition, type ProcessedDesign } from "./postprocess";
 import { createXaiClient, type XaiClient } from "./xai-client";
-import { buildGenerationPrompt } from "./prompt";
-import { loadPickedReferences, referencesForBatch } from "./references";
+import { buildGenerationPrompt, ornamentForStyle } from "./prompt";
+import { referencesForBatch } from "./references";
 import { validateGrokRaster } from "./validate";
+import { prisma } from "../db";
+import { ensureCatalog } from "../catalog/seed";
 
 export type GeneratedDesign = ProcessedDesign & {
   index: number;
@@ -55,12 +50,13 @@ function assertName(name: string): string {
 
 export async function deterministicDesign(
   name: string,
-  style: StyleId,
+  style: string,
   index: number,
 ): Promise<GeneratedDesign> {
-  const variation = buildVariations(name, style, VARIATION_COUNT)[index];
+  const fontStyle: StyleId = fontStyleForSlug(style);
+  const variation = buildVariations(name, fontStyle, VARIATION_COUNT)[index];
   if (!variation) throw new Error("Varyasyon üretilemedi");
-  const composition = composeNameSvg(name, style, variation);
+  const composition = composeNameSvg(name, fontStyle, variation);
   const processed = await processSvgComposition(
     composition.svg,
     composition.rings,
@@ -71,7 +67,7 @@ export async function deterministicDesign(
 
 async function fillWithFallback(
   name: string,
-  style: StyleId,
+  style: string,
   needed: number,
   startIndex: number,
 ): Promise<GeneratedDesign[]> {
@@ -80,20 +76,28 @@ async function fillWithFallback(
   );
 }
 
+async function ornamentForCategory(slug: string): Promise<string> {
+  await ensureCatalog();
+  const category = await prisma.category.findUnique({ where: { slug } });
+  if (category?.promptText) return category.promptText;
+  return ornamentForStyle(slug);
+}
+
 export async function generateDesigns(
   rawName: string,
-  style: StyleId,
+  style: string,
   count = VARIATION_COUNT,
   client: XaiClient | null | undefined = undefined,
+  settingsOverride?: Partial<ResolvedSettings>,
 ): Promise<GenerateResult> {
   const name = assertName(rawName);
   const resolved = client === undefined ? createXaiClient() : client;
   const grokAttempted = Boolean(resolved);
-  const refCount = getXaiRefCount();
-  const maxRetries = getXaiMaxRetries();
-  const batches = getXaiBatches();
-  const nPerBatch = getXaiNPerBatch();
-  const quality = getXaiQuality();
+  const settings = { ...(await resolveGenerationSettings()), ...settingsOverride };
+  const maxRetries = settings.maxRetries;
+  const batches = settings.batches;
+  const nPerBatch = settings.nPerBatch;
+  const quality = settings.quality;
 
   const accepted: GeneratedDesign[] = [];
   let attempts = 0;
@@ -102,17 +106,27 @@ export async function generateDesigns(
   let batchCursor = 0;
 
   if (resolved) {
-    const prompt = buildGenerationPrompt(name, style, refCount);
-    const poolSize = refCount === 0 ? 0 : Math.max(refCount, batches);
-    const pool = loadPickedReferences(name, style, poolSize);
+    const configuredRefs = settings.refCount;
+    const pool =
+      configuredRefs === 0 ? [] : await loadCategoryRefs(name, style, Math.max(configuredRefs, batches));
+    const effectiveRefCount = pool.length === 0 ? 0 : configuredRefs;
+    const ornament = await ornamentForCategory(style);
+    const prompt = buildGenerationPrompt(name, ornament, effectiveRefCount);
 
     const requestBatch = async (n: number) => {
-      const references = referencesForBatch(pool, batchCursor, refCount).map((ref) => ({
+      const references = referencesForBatch(pool, batchCursor, effectiveRefCount).map((ref) => ({
         dataUrl: ref.dataUrl,
       }));
       batchCursor++;
       attempts++;
-      return resolved.generateImages({ prompt, references, n });
+      return resolved.generateImages({
+        prompt,
+        references,
+        n,
+        model: settings.imageModel,
+        quality: settings.quality,
+        resolution: settings.resolution,
+      });
     };
 
     const acceptImages = async (images: { buffer: Buffer }[], visionClient: XaiClient) => {
@@ -138,7 +152,6 @@ export async function generateDesigns(
       }
     };
 
-    // Variety phase: parallel small n-batches, each with a different reference.
     const varietyCount = Math.min(batches, Math.ceil(count / nPerBatch));
     const varietyNs: number[] = [];
     let planned = 0;
@@ -164,7 +177,6 @@ export async function generateDesigns(
       await acceptImages(batch.images, resolved);
     }
 
-    // Retry failed slots only: one request with n = remaining.
     for (let retry = 0; retry < maxRetries && accepted.length < count; retry++) {
       const n = count - accepted.length;
       try {
@@ -200,9 +212,9 @@ export async function generateDesigns(
     attempts,
     apiCostUsd,
     apiCostTicks,
-    imageModel: grokAttempted ? getXaiImageModel() : null,
-    refCount,
-    resolution: grokAttempted ? getXaiResolution() : null,
+    imageModel: grokAttempted ? settings.imageModel : null,
+    refCount: settings.refCount,
+    resolution: grokAttempted ? settings.resolution : null,
     quality: grokAttempted ? quality : null,
     batches,
     nPerBatch,

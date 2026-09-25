@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CODE_VALUES, type CodeValue } from "@/lib/constants";
+import { AdminSettings } from "./AdminSettings";
 
 type CodeRow = {
   id: string;
@@ -36,6 +37,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
   const [generations, setGenerations] = useState<GenerationRow[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [totalTicks, setTotalTicks] = useState(0);
+  const [tab, setTab] = useState<"ops" | "settings">("settings");
 
   async function loadCodes() {
     const response = await fetch("/api/admin/codes");
@@ -137,6 +139,18 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
         </button>
       </header>
 
+      <div className="tabs">
+        <button className={`tab ${tab === "settings" ? "active" : ""}`} type="button" onClick={() => setTab("settings")}>
+          Ayarlar
+        </button>
+        <button className={`tab ${tab === "ops" ? "active" : ""}`} type="button" onClick={() => setTab("ops")}>
+          Kodlar / harcama
+        </button>
+      </div>
+
+      {tab === "settings" ? <AdminSettings /> : null}
+      {tab === "ops" ? (
+        <>
       <form className="panel" onSubmit={createCodes}>
         <h2>Yeni kod üret</h2>
         <label htmlFor="credits">Kredi</label>
@@ -244,6 +258,8 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
           </table>
         </div>
       </section>
+        </>
+      ) : null}
     </div>
   );
 }

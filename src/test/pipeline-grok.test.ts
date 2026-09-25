@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { usdToTicks } from "@/lib/cost";
 import { generateDesigns } from "@/lib/generate/pipeline";
 import { validateGrokRaster } from "@/lib/generate/validate";
 import type { GenerateImagesArgs, XaiClient } from "@/lib/generate/xai-client";
 import { blank, fakePendantPng, fillRect } from "./helpers/pendant";
 import { binaryToPng } from "@/lib/generate/postprocess";
+import { prisma } from "@/lib/db";
 
 function mockClient(options: {
   name?: string;
@@ -61,6 +62,10 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
     nPer: process.env.XAI_N_PER_BATCH,
   };
 
+  beforeEach(async () => {
+    await prisma.appSettings.deleteMany();
+  });
+
   afterEach(() => {
     for (const [key, value] of Object.entries({
       XAI_MAX_RETRIES: previous.retries,
@@ -76,7 +81,13 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
   it("uses two n=2 batches with different references for variety", async () => {
     const ns: number[] = [];
     const refs: string[] = [];
-    const result = await generateDesigns("Merve", "classic", 4, mockClient({ name: "Merve", ns, refs }));
+    const result = await generateDesigns(
+      "Merve",
+      "classic",
+      4,
+      mockClient({ name: "Merve", ns, refs }),
+      { batches: 2, nPerBatch: 2, maxRetries: 2, refCount: 1, quality: "low" },
+    );
     expect(ns).toEqual([2, 2]);
     expect(new Set(refs.filter(Boolean)).size).toBe(2);
     expect(result.designs).toHaveLength(4);
@@ -98,6 +109,7 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
       "classic",
       4,
       mockClient({ name: "Merve", failFirstImages: 2, ns }),
+      { batches: 2, nPerBatch: 2, maxRetries: 2, refCount: 1, quality: "low" },
     );
     expect(ns.slice(0, 2).sort()).toEqual([2, 2]);
     expect(ns[2]).toBe(2);
@@ -113,6 +125,7 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
       "classic",
       1,
       mockClient({ name: "Merve", failRounds: 99 }),
+      { batches: 2, nPerBatch: 2, maxRetries: 2, refCount: 1, quality: "low" },
     );
     expect(result.grokAccepted).toBe(0);
     expect(result.fallbackCount).toBe(1);
@@ -129,6 +142,7 @@ describe("Grok-primary pipeline (mocked xAI)", () => {
       "classic",
       1,
       mockClient({ transcribe: "Zeynep" }),
+      { batches: 2, nPerBatch: 2, maxRetries: 2, refCount: 1, quality: "low" },
     );
     expect(result.fallbackCount).toBe(1);
     expect(result.attempts).toBe(3);

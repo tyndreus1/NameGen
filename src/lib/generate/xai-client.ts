@@ -7,6 +7,9 @@ export type GenerateImagesArgs = {
   prompt: string;
   references: { dataUrl: string }[];
   n: number;
+  model?: string;
+  quality?: string;
+  resolution?: string;
 };
 
 export type GeneratedImage = {
@@ -107,10 +110,13 @@ async function buffersFromResponse(
 
 export function createLiveXaiClient(apiKey: string): XaiClient {
   return {
-    async generateImages({ prompt, references, n }) {
-      const model = getXaiImageModel();
-      const resolution = getXaiResolution();
-      const quality = getXaiQuality();
+    async generateImages({ prompt, references, n, model: modelOverride, quality: qualityOverride, resolution: resolutionOverride }) {
+      const model = modelOverride || getXaiImageModel();
+      const resolution = resolutionOverride === "2k" || resolutionOverride === "1k" ? resolutionOverride : getXaiResolution();
+      const quality =
+        qualityOverride === "low" || qualityOverride === "medium" || qualityOverride === "high"
+          ? qualityOverride
+          : getXaiQuality();
       const count = Math.max(1, Math.round(n));
       const base: Record<string, unknown> = {
         model,

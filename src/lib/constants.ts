@@ -22,3 +22,7 @@ export const STYLE_LABELS: Record<StyleId, string> = {
 
 export const VARIATION_COUNT = 4;
 export const MAX_NAME_LENGTH = 18;
+
+export function fontStyleForSlug(slug: string): StyleId {
+  return (STYLES as readonly string[]).includes(slug) ? (slug as StyleId) : "classic";
+}

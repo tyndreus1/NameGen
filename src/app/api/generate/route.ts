@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
-import { GENERATION_COST, STYLES, VARIATION_COUNT } from "@/lib/constants";
+import { GENERATION_COST, VARIATION_COUNT } from "@/lib/constants";
 import { CreditError, refundGenerationCredits, reserveGenerationCredits } from "@/lib/credits";
 import { prisma } from "@/lib/db";
 import { generateDesigns } from "@/lib/generate/pipeline";
+import { ensureCatalog } from "@/lib/catalog/seed";
 
 const schema = z.object({
   name: z.string().min(1).max(18),
-  style: z.enum(STYLES),
+  style: z.string().min(1).max(60),
 });
 
 export const maxDuration = 120;
@@ -24,10 +25,16 @@ export async function POST(request: Request) {
 
   let reserved = false;
   try {
+    await ensureCatalog();
+    const category = await prisma.category.findFirst({
+      where: { slug: parsed.data.style, enabled: true },
+    });
+    if (!category) return apiError("Geçersiz veya kapalı stil");
+
     const creditsAfterReserve = await reserveGenerationCredits(user.id);
     reserved = true;
 
-    const result = await generateDesigns(parsed.data.name, parsed.data.style, VARIATION_COUNT);
+    const result = await generateDesigns(parsed.data.name, category.slug, VARIATION_COUNT);
     await prisma.generation.create({
       data: {
         userId: user.id,

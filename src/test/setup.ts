@@ -6,6 +6,7 @@ process.env.CODE_SECRET ??= "test-code-secret-please-change";
 process.env.SESSION_SECRET ??= "test-session-secret-please-change";
 process.env.ADMIN_PASSWORD ??= "test-admin-password";
 process.env.DATABASE_URL ??= "file:./test.db";
+process.env.REFERENCE_STORAGE_DIR ??= "data/test-references";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
 if (process.env.DATABASE_URL === "file:./test.db" && !fs.existsSync(dbPath)) {

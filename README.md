@@ -27,7 +27,7 @@ Varsayılan (canlı maliyet testi): `grok-imagine-image-2.0`, **1 referans**, `q
    }
    ```
 
-   Referanslar [assets/references/](assets/references/): aynı isim yok; kelebek `sophia.png` içerir.
+   Referanslar ve stiller **admin Ayarlar**’dan yönetilir (`/admin` → Ayarlar). İlk açılışta 5 kategori (Klasik, Kalpli, Yıldızlı, Kelebekli, Zarif) ve owner referansları seed edilir. Müşteri seçici yalnızca açık kategorileri DB’den okur. Üretim, o kategorinin prompt’unu ve referanslarını kullanır (aynı yazılı isim hariç). Kategoride ref yoksa text-only. Üretim knob’ları (model, quality, ref count, batch, n, resolution, retry) admin’den canlı değiştirilir; env varsayılandır.
 
    Doğrulama: S/B; ü noktaları / Ş cedilla yakınsa kısa gövdeyle kaynaştırılır; **sonra** tek-parça kontrolü; uç halkaları; vision yazım. Geçmezse o slot retry. Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
 
@@ -45,7 +45,9 @@ Her teslim edilen tasarım:
 
 ## Stil listesi
 
-| UI | id |
+Başlangıç kategorileri (hepsi admin’den düzenlenebilir):
+
+| UI | slug |
 |---|---|
 | Klasik script | `classic` |
 | Kalpli | `hearts` |
@@ -54,6 +56,13 @@ Her teslim edilen tasarım:
 | Zarif / Minimal | `elegant` |
 
 Her üretim **4 alternatif** döner.
+
+## Kalıcı depolama
+
+- **Veritabanı** (`DATABASE_URL`): kullanıcılar, kodlar, kategoriler, referans meta, üretim ayarları, maliyet logu. SQLite dosyası veya Postgres kalıcı olmalıdır.
+- **Referans dosyaları** (`REFERENCE_STORAGE_DIR`, varsayılan `data/references`): admin’in yüklediği B/W PNG’ler. Bu dizin **kalıcı disk** üzerinde olmalı (Netlify’nin ephemeral filesystem’i yetmez). Tek instance + volume (Fly, Railway, VPS) veya object storage bağı kullanın.
+
+`data/` gitignore’dadır. Seed, `assets/references/` altındaki owner PNG’lerini bu dizine kopyalar.
 
 ## Örnek çıktılar
 
@@ -122,7 +131,7 @@ Veya `/admin` sayfasından `ADMIN_PASSWORD` ile giriş yapıp kod üretin.
 npm test
 ```
 
-Kapsam: kod imzalama/doğrulama, tek kullanımlık (eşzamanlı çift kullanım dahil), kredi düşümü, tek-parça bağlılık, Grok prompt/referans/halka/ada doğrulama, mock’lu edits istemcisi ve pipeline (3 deneme + font yedeği), örnek isim üretimi (Merve, Şükrü). xAI anahtarı testlerde kullanılmaz.
+Kapsam: kod imzalama/doğrulama, tek kullanımlık, kredi, bağlılık, Grok mock pipeline, kategori CRUD / referans yükleme / aynı-isim dışlama, örnek isim üretimi. xAI anahtarı testlerde kullanılmaz.
 
 Örnek tasarımları diske yazmak:
 
@@ -148,6 +157,7 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `XAI_RESOLUTION` | hayır | `1k` (varsayılan) veya `2k` |
 | `XAI_MAX_RETRIES` | hayır | Kalan slot retry turu; varsayılan `2` |
 | `XAI_TEXT_MODEL` | hayır | Yazım kontrolü (vision); varsayılan `grok-4.6` |
+| `REFERENCE_STORAGE_DIR` | hayır | Referans PNG dizini; varsayılan `data/references` (kalıcı olmalı) |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.
 

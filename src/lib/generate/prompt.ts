@@ -23,7 +23,7 @@ export function loadStyleDescription(): string {
   }
 }
 
-const ORNAMENT: Record<StyleId, string> = {
+export const STYLE_ORNAMENTS: Record<StyleId, string> = {
   classic:
     "No hearts, no stars, no butterflies - only letters, swash, flourishes and the two end rings.",
   hearts:
@@ -73,17 +73,18 @@ export function turkishLetterInstructions(name: string): string {
   return ` Letters, in order: ${letters}. IMPORTANT Turkish letters: ${hints.join(" ")} Exactly two rings.`;
 }
 
-export function ornamentForStyle(style: StyleId): string {
-  return ORNAMENT[style];
+export function ornamentForStyle(style: string): string {
+  if (style in STYLE_ORNAMENTS) return STYLE_ORNAMENTS[style as StyleId];
+  return style;
 }
 
-export function buildTextOnlyPrompt(name: string, style: StyleId): string {
+export function buildTextOnlyPrompt(name: string, styleOrOrnament: string): string {
   const spelled = letterSpelling(name);
   const turkish = turkishLetterInstructions(name);
   return [
     loadStyleDescription(),
     `Create a NEW pendant in exactly this style for the name "${name}". The text must read exactly "${name}" (${spelled}) and nothing else.${turkish}`,
-    ornamentForStyle(style),
+    ornamentForStyle(styleOrOrnament),
     `Pure solid black silhouette on a plain white background, flat, no shading, no gradient, no outline, no texture, no 3D, no chain, no other text.`,
   ]
     .join(" ")
@@ -91,11 +92,11 @@ export function buildTextOnlyPrompt(name: string, style: StyleId): string {
     .trim();
 }
 
-export function buildGenerationPrompt(name: string, style: StyleId, refCount: number): string {
-  return refCount <= 0 ? buildTextOnlyPrompt(name, style) : buildEditPrompt(name, style);
+export function buildGenerationPrompt(name: string, styleOrOrnament: string, refCount: number): string {
+  return refCount <= 0 ? buildTextOnlyPrompt(name, styleOrOrnament) : buildEditPrompt(name, styleOrOrnament);
 }
 
-export function buildEditPrompt(name: string, style: StyleId): string {
+export function buildEditPrompt(name: string, styleOrOrnament: string): string {
   const spelled = letterSpelling(name);
   const turkish = turkishLetterInstructions(name);
 
@@ -105,7 +106,7 @@ export function buildEditPrompt(name: string, style: StyleId): string {
     `Same bold, thick, flowing retro script; every letter joined to the next so the whole design is ONE single connected solid black piece.`,
     `A long swash flows from the letter tails underneath the entire name and ties back into the first letter.`,
     `A small round open ring (circle with a hole) at the far left end and the far right end for attaching a chain, joined by curly flourishes.`,
-    ornamentForStyle(style),
+    ornamentForStyle(styleOrOrnament),
     `Pure solid black silhouette on a plain white background, flat, no shading, no gradient, no outline, no texture, no 3D, no chain, no other text.`,
   ]
     .join(" ")

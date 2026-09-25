@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { GENERATION_COST, STYLE_LABELS, STYLES, type StyleId } from "@/lib/constants";
+import { useEffect, useMemo, useState } from "react";
+import { GENERATION_COST } from "@/lib/constants";
 
 type User = { id: string; email: string; credits: number } | null;
 type Design = {
@@ -11,16 +11,36 @@ type Design = {
   png: string;
   svg: string;
 };
+type CatalogStyle = {
+  slug: string;
+  label: string;
+  description: string;
+  thumbUrl: string | null;
+};
 
 export function HomeApp({ user }: { user: User }) {
   const [credits, setCredits] = useState(user?.credits ?? 0);
   const [name, setName] = useState("Merve");
-  const [style, setStyle] = useState<StyleId>("classic");
+  const [styles, setStyles] = useState<CatalogStyle[]>([]);
+  const [style, setStyle] = useState("classic");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [designs, setDesigns] = useState<Design[]>([]);
+
+  useEffect(() => {
+    void fetch("/api/catalog")
+      .then((response) => response.json())
+      .then((data) => {
+        const rows = (data.categories ?? []) as CatalogStyle[];
+        setStyles(rows);
+        if (rows.length && !rows.some((row) => row.slug === style)) {
+          setStyle(rows[0]!.slug);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const canGenerate = Boolean(user) && credits >= GENERATION_COST && name.trim().length > 0;
 
@@ -133,14 +153,16 @@ export function HomeApp({ user }: { user: User }) {
 
           <label>Stil</label>
           <div className="styles">
-            {STYLES.map((id) => (
+            {styles.map((item) => (
               <button
-                key={id}
+                key={item.slug}
                 type="button"
-                className={`style-btn ${style === id ? "active" : ""}`}
-                onClick={() => setStyle(id)}
+                className={`style-btn ${style === item.slug ? "active" : ""}`}
+                onClick={() => setStyle(item.slug)}
               >
-                {STYLE_LABELS[id]}
+                {item.thumbUrl ? <img alt="" className="style-thumb" src={item.thumbUrl} /> : null}
+                <span>{item.label}</span>
+                {item.description ? <small>{item.description}</small> : null}
               </button>
             ))}
           </div>
