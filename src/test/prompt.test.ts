@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEditPrompt,
+  buildGenerationPrompt,
+  buildTextOnlyPrompt,
   letterSpelling,
+  loadStyleDescription,
   ornamentForStyle,
   turkishLetterInstructions,
 } from "@/lib/generate/prompt";
@@ -55,5 +58,16 @@ describe("Grok edit prompt", () => {
     expect(buildEditPrompt("Zeynep", "butterfly")).toContain("butterfly");
     expect(buildEditPrompt("Zeynep", "star")).toContain("star");
     expect(buildEditPrompt("Zeynep", "elegant")).toContain("No hearts, no stars, no butterflies");
+  });
+
+  it("loads the editable style-description file for text-only generations", () => {
+    const description = loadStyleDescription();
+    expect(description.length).toBeGreaterThan(40);
+    expect(description).toMatch(/laser-cut/i);
+    const textOnly = buildTextOnlyPrompt("Merve", "classic");
+    expect(textOnly).toContain(description.slice(0, 40));
+    expect(textOnly).toContain('The text must read exactly "Merve" (M-e-r-v-e)');
+    expect(buildGenerationPrompt("Merve", "classic", 0)).toBe(textOnly);
+    expect(buildGenerationPrompt("Merve", "classic", 1)).toBe(buildEditPrompt("Merve", "classic"));
   });
 });

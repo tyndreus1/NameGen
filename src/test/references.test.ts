@@ -11,12 +11,13 @@ describe("reference picking", () => {
     expect(pickReferenceIds("Sophiaa", "butterfly")).not.toContain("sophia");
   });
 
-  it("sends two style-appropriate refs and forces Sophia for butterfly", () => {
-    expect(pickReferenceIds("Merve", "classic")).toEqual(["charlotte", "zeynep"]);
-    expect(pickReferenceIds("Merve", "hearts")).toEqual(["aleyna", "zeynep"]);
-    expect(pickReferenceIds("Merve", "butterfly")).toEqual(["sophia", "aleyna"]);
-    expect(pickReferenceIds("Elif", "star").length).toBe(2);
-    expect(pickReferenceIds("Elif", "elegant").length).toBe(2);
+  it("sends style-appropriate refs and forces Sophia for butterfly", () => {
+    expect(pickReferenceIds("Merve", "classic", 2)).toEqual(["charlotte", "zeynep"]);
+    expect(pickReferenceIds("Merve", "classic", 1)).toEqual(["charlotte"]);
+    expect(pickReferenceIds("Merve", "hearts", 1)).toEqual(["aleyna"]);
+    expect(pickReferenceIds("Merve", "butterfly", 1)).toEqual(["sophia"]);
+    expect(pickReferenceIds("Merve", "butterfly", 2)).toEqual(["sophia", "aleyna"]);
+    expect(pickReferenceIds("Elif", "star", 2).length).toBe(2);
   });
 
   it("matches reference names case-insensitively in Turkish locale", () => {

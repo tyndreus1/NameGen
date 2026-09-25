@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         fallbackCount: result.fallbackCount,
         attempts: result.attempts,
         apiCostUsd: result.apiCostUsd,
+        apiCostTicks: BigInt(result.apiCostTicks),
         imageModel: result.imageModel,
       },
     });
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
       grokAccepted: result.grokAccepted,
       fallbackCount: result.fallbackCount,
       apiCostUsd: result.apiCostUsd,
+      apiCostTicks: result.apiCostTicks,
       designs: result.designs.map((design) => ({
         index: design.index,
         engine: design.engine,

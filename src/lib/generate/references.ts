@@ -64,8 +64,13 @@ export function loadReferenceDataUrl(id: ReferenceId): string {
   return `data:image/png;base64,${buf.toString("base64")}`;
 }
 
-export function loadPickedReferences(name: string, style: StyleId): { id: ReferenceId; dataUrl: string }[] {
-  return pickReferenceIds(name, style, 2).map((id) => ({
+export function loadPickedReferences(
+  name: string,
+  style: StyleId,
+  count = 2,
+): { id: ReferenceId; dataUrl: string }[] {
+  if (count <= 0) return [];
+  return pickReferenceIds(name, style, count).map((id) => ({
     id,
     dataUrl: loadReferenceDataUrl(id),
   }));

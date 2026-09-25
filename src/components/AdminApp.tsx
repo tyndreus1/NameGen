@@ -21,6 +21,7 @@ type GenerationRow = {
   fallbackCount: number;
   attempts: number;
   apiCostUsd: number;
+  apiCostTicks: string;
   imageModel: string | null;
   createdAt: string;
 };
@@ -34,6 +35,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
   const [created, setCreated] = useState<string[]>([]);
   const [generations, setGenerations] = useState<GenerationRow[]>([]);
   const [totalCost, setTotalCost] = useState(0);
+  const [totalTicks, setTotalTicks] = useState(0);
 
   async function loadCodes() {
     const response = await fetch("/api/admin/codes");
@@ -48,6 +50,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
     const data = await response.json();
     setGenerations(data.generations);
     setTotalCost(data.totalCost ?? 0);
+    setTotalTicks(Number(data.totalTicks ?? 0));
   }
 
   useEffect(() => {
@@ -176,7 +179,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
       <section className="panel" style={{ marginTop: 18 }}>
         <h2>API harcaması</h2>
         <p className="hint">
-          Son üretimlerin xAI maliyeti (yanıttaki cost alanı). Toplam görünen: ${totalCost.toFixed(4)}
+          Son üretimlerin xAI maliyeti. 1e10 ticks = $1. Toplam: ${totalCost.toFixed(4)} ({totalTicks} ticks)
         </p>
         <div className="table-wrap">
           <table>
@@ -190,6 +193,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
                 <th>Deneme</th>
                 <th>Model</th>
                 <th>Maliyet</th>
+                <th>Ticks</th>
               </tr>
             </thead>
             <tbody>
@@ -205,6 +209,7 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
                   <td>{row.attempts}</td>
                   <td>{row.imageModel ?? "—"}</td>
                   <td>${row.apiCostUsd.toFixed(4)}</td>
+                  <td>{row.apiCostTicks ?? "0"}</td>
                 </tr>
               ))}
             </tbody>

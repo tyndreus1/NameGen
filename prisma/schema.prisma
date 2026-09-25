@@ -38,6 +38,7 @@ model Generation {
   fallbackCount Int      @default(0)
   attempts      Int      @default(0)
   apiCostUsd    Float    @default(0)
+  apiCostTicks  BigInt   @default(0)
   imageModel    String?
   createdAt     DateTime @default(now())
 }

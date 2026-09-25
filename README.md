@@ -4,38 +4,38 @@ Lazer kesim isim kolyesi / pendant tasarımları üreten bir web uygulaması. M�
 
 ## Yaklaşım
 
-**Asıl üretici Grok image-to-image’dir.** Font yolu yalnızca son çare yedektir (canlı 27-görsel testte font tasarımları referansların çok gerisinde kaldı).
+**Asıl üretici Grok image-to-image’dir.** Font yolu yalnızca son çare yedektir. Strateji env ile kod değiştirmeden ayarlanır (maliyet: her input referansı da faturalanır; 2.0 + 2 ref ≈ $0.08/görsel).
 
-1. **Grok edits (birincil)**  
-   `XAI_API_KEY` varsa her slot `POST https://api.x.ai/v1/images/edits` ile **JSON body** gönderir (multipart / OpenAI SDK `images.edit()` bu endpoint’te çalışmaz):
+Varsayılan: `XAI_IMAGE_MODEL=grok-imagine-image-2.0`, `XAI_REF_COUNT=1`, `XAI_RESOLUTION=1k`, `XAI_MAX_RETRIES=2`.
+
+1. **Grok (birincil)**  
+   İhtiyaç duyulan görseller **tek istekte `n` ile** alınır. Doğrulamayı geçmeyen slot’lar için sonraki tur `n = kalan` olur (`XAI_MAX_RETRIES` ekstra tur, varsayılan 2).
+
+   - `XAI_REF_COUNT=1` veya `2` → `POST https://api.x.ai/v1/images/edits` JSON body (multipart / OpenAI SDK çalışmaz). Tek ref’te `image`, iki ref’te `images[]`.
+   - `XAI_REF_COUNT=0` → `POST https://api.x.ai/v1/images/generations` (text-only). Stil metni [`prompts/style-description.md`](prompts/style-description.md) dosyasındandır; sonradan değiştirilebilir.
 
    ```json
    {
      "model": "grok-imagine-image-2.0",
      "prompt": "...",
-     "images": [
-       { "url": "data:image/png;base64,...", "type": "image_url" },
-       { "url": "data:image/png;base64,...", "type": "image_url" }
-     ],
+     "image": { "url": "data:image/png;base64,...", "type": "image_url" },
      "aspect_ratio": "5:2",
-     "n": 1,
+     "n": 4,
      "response_format": "b64_json",
-     "resolution": "2k"
+     "resolution": "1k"
    }
    ```
 
-   Tek referansta `image` (tekil) kullanılır. **2k** → 3200×1280 PNG (lazer kalitesi, ~$0.10). Varsayılan 1k JPEG’dir; kullanılmaz. Model `XAI_IMAGE_MODEL` ile değişir (varsayılan `grok-imagine-image-2.0`; canlı testte `-quality`’den daha iyi benzerlik).
+   `XAI_RESOLUTION=2k` lazer kalitesi PNG (~3200×1280, daha pahalı). Model: `grok-imagine-image` | `grok-imagine-image-2.0` | `grok-imagine-image-quality`.
 
-   Stil için [owner referansları](assets/references/) gönderilir: istek başına **2** görsel, hedef isimle aynı referans asla yok; kelebek stili `sophia.png` içerir. Prompt şablonu ve süsleme cümleleri `src/lib/generate/prompt.ts` içinde; denenen her prompt `assets/references/prompts.md` dosyasında.
+   Referanslar [assets/references/](assets/references/): hedef isimle aynı ref yok; kelebek stili `sophia.png` içerir. Prompt şablonu `src/lib/generate/prompt.ts`.
 
-   Her görsel doğrulanır: saf S/B eşik, toz silme / yakın kopuk nokta-cedilla köprüleme (uzak ada → red), bağlı bileşen **1**, solda ve sağda **kapalı** halka + iç delik (spiral boşluk halka sayılmaz), yazım kontrolü Grok vision (`XAI_TEXT_MODEL`, varsayılan `grok-4.6`) ile. Başarısız slot **3 kez** denenir; 4 alternatif **paralel** üretilir. 2k B/W sonuç [potrace](https://potrace.sourceforge.net/) ile SVG’ye izlenir.
+   Doğrulama: S/B, ada/cedilla, tek parça, uç halkaları, Grok vision yazım (`XAI_TEXT_MODEL`). Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
 
 2. **Deterministik font yedeği (son çare)**  
-   Slot’un 3 denemesi de başarısızsa (veya anahtar yoksa) OFL script font + prosedürel swash/halka/süsleme kullanılır ve sonuç **Yedek (font)** olarak işaretlenir.
+   Tüm retry’ler bitince kalan slot’lar font yoluyla doldurulur ve **Yedek (font)** işaretlenir.
 
-Anahtar yoksa uygulama font yoluyla çalışır. Bu ortamda xAI anahtarı yok; birim testler istemciyi mock’lar. Canlı Grok testi owner tarafında çalıştırılmalı.
-
-`/admin` her üretimin xAI `cost` toplamını listeler (müşteri başı API harcaması). Kredi ücreti değişmez: **4 tasarım = 3 kredi**; hiç çıktı yoksa iade.
+`/admin` her üretimin USD maliyetini ve `cost_in_usd_ticks` (1e10 ticks = $1) değerini listeler. Kredi aynı: **4 tasarım = 3 kredi**; hiç çıktı yoksa iade.
 
 Her teslim edilen tasarım:
 
@@ -97,7 +97,7 @@ Gereksinimler: Node.js 20+.
 ```bash
 cp .env.example .env
 # .env içinde CODE_SECRET, SESSION_SECRET, ADMIN_PASSWORD doldurun
-# XAI_API_KEY, isteğe bağlı XAI_IMAGE_MODEL ve XAI_TEXT_MODEL
+# XAI_API_KEY ve isteğe bağlı XAI_IMAGE_MODEL / XAI_REF_COUNT / XAI_RESOLUTION / XAI_MAX_RETRIES / XAI_TEXT_MODEL
 
 npm install
 npx prisma db push
@@ -141,7 +141,10 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `SESSION_SECRET` | evet | Oturum JWT sırrı |
 | `ADMIN_PASSWORD` | evet | `/admin` şifresi |
 | `XAI_API_KEY` | hayır | xAI / Grok edits + vision API |
-| `XAI_IMAGE_MODEL` | hayır | Image model; varsayılan `grok-imagine-image-2.0` |
+| `XAI_IMAGE_MODEL` | hayır | `grok-imagine-image` / `grok-imagine-image-2.0` / `grok-imagine-image-quality` |
+| `XAI_REF_COUNT` | hayır | `0` text-only, `1` (varsayılan) veya `2` edits |
+| `XAI_RESOLUTION` | hayır | `1k` (varsayılan) veya `2k` |
+| `XAI_MAX_RETRIES` | hayır | İlk `n` batch’ten sonraki tur sayısı; varsayılan `2` |
 | `XAI_TEXT_MODEL` | hayır | Yazım kontrolü (vision); varsayılan `grok-4.6` |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.

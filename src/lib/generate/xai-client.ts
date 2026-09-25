@@ -1,25 +1,34 @@
-import { getXaiApiKey, getXaiImageModel, getXaiTextModel } from "../env";
+import { usdToTicks } from "../cost";
+import { getXaiApiKey, getXaiImageModel, getXaiResolution, getXaiTextModel } from "../env";
 
 export const XAI_BASE = "https://api.x.ai/v1";
 
-export type EditImageArgs = {
+export type GenerateImagesArgs = {
   prompt: string;
   references: { dataUrl: string }[];
+  n: number;
 };
 
-export type EditImageResult = {
+export type GeneratedImage = {
   buffer: Buffer;
+};
+
+export type GenerateImagesResult = {
+  images: GeneratedImage[];
   cost: number;
+  costTicks: number;
   model: string;
+  endpoint: "edits" | "generations";
 };
 
 export type TranscribeResult = {
   text: string;
   cost: number;
+  costTicks: number;
 };
 
 export type XaiClient = {
-  editImage(args: EditImageArgs): Promise<EditImageResult>;
+  generateImages(args: GenerateImagesArgs): Promise<GenerateImagesResult>;
   transcribeName(png: Buffer): Promise<TranscribeResult>;
 };
 
@@ -34,6 +43,24 @@ export function extractCost(payload: unknown): number {
     if (typeof u.cost_usd === "number") return u.cost_usd;
   }
   return 0;
+}
+
+export function extractCostTicks(payload: unknown): number {
+  if (!payload || typeof payload !== "object") return 0;
+  const obj = payload as Record<string, unknown>;
+  if (typeof obj.cost_in_usd_ticks === "number") return Math.round(obj.cost_in_usd_ticks);
+  const usage = obj.usage;
+  if (usage && typeof usage === "object") {
+    const u = usage as Record<string, unknown>;
+    if (typeof u.cost_in_usd_ticks === "number") return Math.round(u.cost_in_usd_ticks);
+  }
+  return usdToTicks(extractCost(payload));
+}
+
+function decodeImageItem(item: { b64_json?: string; url?: string } | undefined): Buffer | null {
+  if (!item) return null;
+  if (item.b64_json) return Buffer.from(item.b64_json, "base64");
+  return null;
 }
 
 async function postJson(path: string, apiKey: string, body: unknown): Promise<unknown> {
@@ -58,40 +85,61 @@ async function postJson(path: string, apiKey: string, body: unknown): Promise<un
   return parsed;
 }
 
+async function buffersFromResponse(
+  json: { data?: { b64_json?: string; url?: string }[] },
+): Promise<Buffer[]> {
+  const items = json.data ?? [];
+  const out: Buffer[] = [];
+  for (const item of items) {
+    const fromB64 = decodeImageItem(item);
+    if (fromB64) {
+      out.push(fromB64);
+      continue;
+    }
+    if (item.url) {
+      const downloaded = await fetch(item.url);
+      if (!downloaded.ok) throw new Error("xAI image URL download failed");
+      out.push(Buffer.from(await downloaded.arrayBuffer()));
+    }
+  }
+  return out;
+}
+
 export function createLiveXaiClient(apiKey: string): XaiClient {
   return {
-    async editImage({ prompt, references }) {
+    async generateImages({ prompt, references, n }) {
       const model = getXaiImageModel();
-      const images = references.map((ref) => ({
-        url: ref.dataUrl,
-        type: "image_url",
-      }));
-      const body: Record<string, unknown> = {
+      const resolution = getXaiResolution();
+      const count = Math.max(1, Math.round(n));
+      const base: Record<string, unknown> = {
         model,
         prompt,
         aspect_ratio: "5:2",
-        n: 1,
+        n: count,
         response_format: "b64_json",
-        resolution: "2k",
+        resolution,
       };
-      if (images.length === 1) {
-        body.image = images[0];
-      } else {
-        body.images = images;
+
+      const endpoint = references.length === 0 ? "generations" : "edits";
+      if (references.length === 1) {
+        base.image = { url: references[0]!.dataUrl, type: "image_url" };
+      } else if (references.length > 1) {
+        base.images = references.map((ref) => ({ url: ref.dataUrl, type: "image_url" }));
       }
-      const json = (await postJson("/images/edits", apiKey, body)) as {
+
+      const path = endpoint === "edits" ? "/images/edits" : "/images/generations";
+      const json = (await postJson(path, apiKey, base)) as {
         data?: { b64_json?: string; url?: string }[];
       };
-      const item = json.data?.[0];
-      let buffer: Buffer | null = null;
-      if (item?.b64_json) buffer = Buffer.from(item.b64_json, "base64");
-      else if (item?.url) {
-        const downloaded = await fetch(item.url);
-        if (!downloaded.ok) throw new Error("xAI edit image URL download failed");
-        buffer = Buffer.from(await downloaded.arrayBuffer());
-      }
-      if (!buffer) throw new Error("xAI edit returned no image");
-      return { buffer, cost: extractCost(json), model };
+      const buffers = await buffersFromResponse(json);
+      if (!buffers.length) throw new Error(`xAI ${endpoint} returned no image`);
+      return {
+        images: buffers.map((buffer) => ({ buffer })),
+        cost: extractCost(json),
+        costTicks: extractCostTicks(json),
+        model,
+        endpoint,
+      };
     },
 
     async transcribeName(png) {
@@ -130,7 +178,11 @@ export function createLiveXaiClient(apiKey: string): XaiClient {
           /* keep raw */
         }
       }
-      return { text: text.normalize("NFC").trim(), cost: extractCost(json) };
+      return {
+        text: text.normalize("NFC").trim(),
+        cost: extractCost(json),
+        costTicks: extractCostTicks(json),
+      };
     },
   };
 }

@@ -10,8 +10,10 @@ export async function GET() {
     include: { user: { select: { email: true } } },
   });
   const totalCost = rows.reduce((sum, row) => sum + row.apiCostUsd, 0);
+  const totalTicks = rows.reduce((sum, row) => sum + Number(row.apiCostTicks), 0);
   return json({
     totalCost,
+    totalTicks,
     generations: rows.map((row) => ({
       id: row.id,
       email: row.user.email,
@@ -21,6 +23,7 @@ export async function GET() {
       fallbackCount: row.fallbackCount,
       attempts: row.attempts,
       apiCostUsd: row.apiCostUsd,
+      apiCostTicks: row.apiCostTicks.toString(),
       imageModel: row.imageModel,
       createdAt: row.createdAt,
     })),

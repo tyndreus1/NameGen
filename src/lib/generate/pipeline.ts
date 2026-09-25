@@ -1,13 +1,12 @@
 import { VARIATION_COUNT, type StyleId } from "../constants";
-import { getXaiImageModel } from "../env";
+import { addTicks } from "../cost";
+import { getXaiImageModel, getXaiMaxRetries, getXaiRefCount, getXaiResolution } from "../env";
 import { buildVariations, composeNameSvg } from "./vector";
 import { processSvgComposition, type ProcessedDesign } from "./postprocess";
 import { createXaiClient, type XaiClient } from "./xai-client";
-import { buildEditPrompt } from "./prompt";
+import { buildGenerationPrompt } from "./prompt";
 import { loadPickedReferences } from "./references";
 import { validateGrokRaster } from "./validate";
-
-const SLOT_RETRIES = 3;
 
 export type GeneratedDesign = ProcessedDesign & {
   index: number;
@@ -23,7 +22,10 @@ export type GenerateResult = {
   fallbackCount: number;
   attempts: number;
   apiCostUsd: number;
+  apiCostTicks: number;
   imageModel: string | null;
+  refCount: number;
+  resolution: string | null;
 };
 
 function assertName(name: string): string {
@@ -56,50 +58,15 @@ export async function deterministicDesign(
   return { ...processed, index, engine: "deterministic", fallback: true };
 }
 
-async function fillSlot(
+async function fillWithFallback(
   name: string,
   style: StyleId,
-  index: number,
-  client: XaiClient | null,
-): Promise<{ design: GeneratedDesign; attempts: number; cost: number }> {
-  let attempts = 0;
-  let cost = 0;
-  if (client) {
-    const prompt = buildEditPrompt(name, style);
-    const references = loadPickedReferences(name, style);
-    for (let tryIndex = 0; tryIndex < SLOT_RETRIES; tryIndex++) {
-      attempts++;
-      try {
-        const edited = await client.editImage({
-          prompt,
-          references: references.map((ref) => ({ dataUrl: ref.dataUrl })),
-        });
-        cost += edited.cost;
-        const checked = await validateGrokRaster(edited.buffer, name, client);
-        cost += checked.visionCost;
-        if (checked.ok) {
-          return {
-            design: {
-              png: checked.png,
-              svg: checked.svg,
-              components: 1,
-              source: "grok",
-              index,
-              engine: "grok",
-              fallback: false,
-            },
-            attempts,
-            cost,
-          };
-        }
-      } catch {
-        /* retry */
-      }
-    }
-  }
-
-  const fallback = await deterministicDesign(name, style, index);
-  return { design: fallback, attempts, cost };
+  needed: number,
+  startIndex: number,
+): Promise<GeneratedDesign[]> {
+  return Promise.all(
+    Array.from({ length: needed }, (_, offset) => deterministicDesign(name, style, startIndex + offset)),
+  );
 }
 
 export async function generateDesigns(
@@ -111,16 +78,65 @@ export async function generateDesigns(
   const name = assertName(rawName);
   const resolved = client === undefined ? createXaiClient() : client;
   const grokAttempted = Boolean(resolved);
+  const refCount = getXaiRefCount();
+  const maxRetries = getXaiMaxRetries();
 
-  const slots = await Promise.all(
-    Array.from({ length: count }, (_, index) => fillSlot(name, style, index, resolved)),
-  );
+  const accepted: GeneratedDesign[] = [];
+  let attempts = 0;
+  let apiCostUsd = 0;
+  let apiCostTicks = 0;
 
-  const designs = slots.map((slot) => slot.design);
+  if (resolved) {
+    const prompt = buildGenerationPrompt(name, style, refCount);
+    const references = loadPickedReferences(name, style, refCount);
+    const rounds = 1 + maxRetries;
+
+    for (let round = 0; round < rounds && accepted.length < count; round++) {
+      const needed = count - accepted.length;
+      attempts++;
+      try {
+        const batch = await resolved.generateImages({
+          prompt,
+          references: references.map((ref) => ({ dataUrl: ref.dataUrl })),
+          n: needed,
+        });
+        apiCostUsd += batch.cost;
+        apiCostTicks = addTicks(apiCostTicks, batch.costTicks);
+
+        for (const image of batch.images) {
+          if (accepted.length >= count) break;
+          try {
+            const checked = await validateGrokRaster(image.buffer, name, resolved);
+            apiCostUsd += checked.visionCost;
+            apiCostTicks = addTicks(apiCostTicks, checked.visionCostTicks);
+            if (!checked.ok) continue;
+            accepted.push({
+              png: checked.png,
+              svg: checked.svg,
+              components: 1,
+              source: "grok",
+              index: accepted.length,
+              engine: "grok",
+              fallback: false,
+            });
+          } catch {
+            /* skip this image */
+          }
+        }
+      } catch {
+        /* retry remaining slots */
+      }
+    }
+  }
+
+  if (accepted.length < count) {
+    const fallbacks = await fillWithFallback(name, style, count - accepted.length, accepted.length);
+    accepted.push(...fallbacks);
+  }
+
+  const designs = accepted.slice(0, count).map((design, index) => ({ ...design, index }));
   const grokAccepted = designs.filter((d) => d.engine === "grok").length;
   const fallbackCount = designs.filter((d) => d.engine !== "grok").length;
-  const attempts = slots.reduce((sum, slot) => sum + slot.attempts, 0);
-  const apiCostUsd = slots.reduce((sum, slot) => sum + slot.cost, 0);
 
   if (designs.length === 0) {
     throw new Error("Tasarım üretilemedi");
@@ -134,6 +150,9 @@ export async function generateDesigns(
     fallbackCount,
     attempts,
     apiCostUsd,
+    apiCostTicks,
     imageModel: grokAttempted ? getXaiImageModel() : null,
+    refCount,
+    resolution: grokAttempted ? getXaiResolution() : null,
   };
 }

@@ -1,4 +1,27 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { StyleId } from "../constants";
+
+const FALLBACK_STYLE_DESCRIPTION =
+  "Laser-cut metal name necklace pendant design, flat vector silhouette, pure solid black on a plain white background, no shading, no gradients, no texture, no 3D, no chain. Bold, thick, flowing retro brush script with every letter joined to the next so the whole design is ONE single connected solid black piece. A long elegant swash flows from the letter tails underneath the entire name and ties back into the first letter. A small round open ring (circle with a hole) at the far left end and the far right end for attaching a chain, joined by curly flourishes. Centered horizontal composition, wide banner format, generous white margin. No other text, no floating pieces.";
+
+export function styleDescriptionPath(): string {
+  return path.join(process.cwd(), "prompts", "style-description.md");
+}
+
+export function loadStyleDescription(): string {
+  try {
+    const raw = fs.readFileSync(styleDescriptionPath(), "utf8");
+    return raw
+      .split("\n")
+      .filter((line) => !line.startsWith("#"))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch {
+    return FALLBACK_STYLE_DESCRIPTION;
+  }
+}
 
 const ORNAMENT: Record<StyleId, string> = {
   classic:
@@ -52,6 +75,24 @@ export function turkishLetterInstructions(name: string): string {
 
 export function ornamentForStyle(style: StyleId): string {
   return ORNAMENT[style];
+}
+
+export function buildTextOnlyPrompt(name: string, style: StyleId): string {
+  const spelled = letterSpelling(name);
+  const turkish = turkishLetterInstructions(name);
+  return [
+    loadStyleDescription(),
+    `Create a NEW pendant in exactly this style for the name "${name}". The text must read exactly "${name}" (${spelled}) and nothing else.${turkish}`,
+    ornamentForStyle(style),
+    `Pure solid black silhouette on a plain white background, flat, no shading, no gradient, no outline, no texture, no 3D, no chain, no other text.`,
+  ]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function buildGenerationPrompt(name: string, style: StyleId, refCount: number): string {
+  return refCount <= 0 ? buildTextOnlyPrompt(name, style) : buildEditPrompt(name, style);
 }
 
 export function buildEditPrompt(name: string, style: StyleId): string {
