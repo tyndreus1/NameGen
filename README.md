@@ -85,6 +85,10 @@ Ana ekranlar:
 | ![](docs/samples/ui_home.png) | ![](docs/samples/ui_results.png) |
 | **Admin kod** | **Kod yükleme** |
 | ![](docs/samples/ui_admin.png) | ![](docs/samples/ui_redeem.png) |
+| **Admin Ayarlar (üretim)** | **Kategoriler** |
+| ![](docs/samples/ui_admin_settings.png) | ![](docs/samples/ui_admin_categories.png) |
+| **Referanslar** | **Müşteri stil seçici (DB)** |
+| ![](docs/samples/ui_admin_references.png) | ![](docs/samples/ui_home_styles.png) |
 
 Aynı seti yeniden üretmek için: `npx tsx scripts/write-docs-samples.ts`
 

@@ -18,11 +18,13 @@ export async function GET() {
     },
   });
   return json({
-    categories: rows.map((row) =>
-      publicCategory({
+    categories: rows.map((row, index) => {
+      const refs = row.references;
+      const thumb = refs.length ? refs[index % refs.length] : undefined;
+      return publicCategory({
         ...row,
-        thumbId: row.references[0]?.referenceId ?? null,
-      }),
-    ),
+        thumbId: thumb?.referenceId ?? null,
+      });
+    }),
   });
 }
