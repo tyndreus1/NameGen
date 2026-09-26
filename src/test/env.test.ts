@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_XAI_IMAGE_MODEL,
   DEFAULT_XAI_TEXT_MODEL,
+  getCreditsApiKey,
+  getCreditsApiUrl,
+  getCreditsProvider,
   getXaiBatches,
   getXaiImageModel,
   getXaiMaxRetries,
@@ -71,6 +74,30 @@ describe("xAI model env", () => {
     expect(getXaiQuality()).toBe("low");
     expect(getXaiBatches()).toBe(2);
     expect(getXaiNPerBatch()).toBe(2);
+  });
+
+  it("defaults the credit provider to local and reads remote stubs from env", () => {
+    const previousProvider = process.env.CREDITS_PROVIDER;
+    const previousUrl = process.env.CREDITS_API_URL;
+    const previousKey = process.env.CREDITS_API_KEY;
+    delete process.env.CREDITS_PROVIDER;
+    delete process.env.CREDITS_API_URL;
+    delete process.env.CREDITS_API_KEY;
+    expect(getCreditsProvider()).toBe("local");
+    expect(getCreditsApiUrl()).toBeUndefined();
+    expect(getCreditsApiKey()).toBeUndefined();
+    process.env.CREDITS_PROVIDER = "remote";
+    process.env.CREDITS_API_URL = "https://credits.example/api";
+    process.env.CREDITS_API_KEY = "secret-key";
+    expect(getCreditsProvider()).toBe("remote");
+    expect(getCreditsApiUrl()).toBe("https://credits.example/api");
+    expect(getCreditsApiKey()).toBe("secret-key");
+    if (previousProvider === undefined) delete process.env.CREDITS_PROVIDER;
+    else process.env.CREDITS_PROVIDER = previousProvider;
+    if (previousUrl === undefined) delete process.env.CREDITS_API_URL;
+    else process.env.CREDITS_API_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.CREDITS_API_KEY;
+    else process.env.CREDITS_API_KEY = previousKey;
   });
 
   it("parses ref count, resolution, and retries from env", () => {

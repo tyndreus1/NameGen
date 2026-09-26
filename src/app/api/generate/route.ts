@@ -2,7 +2,14 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
 import { VARIATION_COUNT } from "@/lib/constants";
-import { CreditError, generationCharge, refundGenerationCredits, reserveGenerationCredits } from "@/lib/credits";
+import {
+  CreditError,
+  generationCharge,
+  getBalance,
+  NAMEGEN_FEATURE,
+  refund,
+  spend,
+} from "@/lib/credits";
 import { prisma } from "@/lib/db";
 import { generateDesigns } from "@/lib/generate/pipeline";
 import { ensureCatalog } from "@/lib/catalog/seed";
@@ -24,7 +31,9 @@ export async function POST(request: Request) {
     return apiError("İsim ve stil gerekli");
   }
 
-  let reserved = false;
+  // Price and balance are server-owned. Ignore any client-sent cost/credits
+  // (zod strips unknown keys; generationCharge() is the only price source).
+  let spendId: string | null = null;
   try {
     await ensureCatalog();
     const category = await prisma.category.findFirst({
@@ -33,10 +42,14 @@ export async function POST(request: Request) {
     if (!category) return apiError("Geçersiz veya kapalı stil");
 
     const cost = await generationCharge();
-    const creditsAfterReserve = await reserveGenerationCredits(user.id);
-    reserved = true;
+    const idempotencyKey = crypto.randomUUID();
+    spendId = await spend(user.id, NAMEGEN_FEATURE, cost, idempotencyKey);
 
     const result = await generateDesigns(parsed.data.name, category.slug, VARIATION_COUNT);
+    if (result.designs.length === 0) {
+      throw new CreditError("Üretim başarısız", "GENERATION_FAILED");
+    }
+
     const apiCostUsd = result.apiCostUsd > 0 ? result.apiCostUsd : ticksToUsd(result.apiCostTicks);
     await prisma.generation.create({
       data: {
@@ -55,7 +68,7 @@ export async function POST(request: Request) {
     });
 
     return json({
-      credits: creditsAfterReserve,
+      credits: await getBalance(user.id),
       cost,
       usedGrok: result.usedGrok,
       grokAttempted: result.grokAttempted,
@@ -73,11 +86,12 @@ export async function POST(request: Request) {
       })),
     });
   } catch (error) {
-    if (reserved) {
-      await refundGenerationCredits(user.id).catch(() => undefined);
+    if (spendId) {
+      await refund(spendId).catch(() => undefined);
     }
     if (error instanceof CreditError) {
-      return apiError(error.message, 402, { code: error.code });
+      const status = error.code === "INSUFFICIENT" ? 402 : error.code === "GENERATION_FAILED" ? 500 : 400;
+      return apiError(error.message, status, { code: error.code });
     }
     const message = error instanceof Error ? error.message : "Üretim başarısız";
     return apiError(message, 500);

@@ -8,13 +8,14 @@ datasource db {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   passwordHash String
-  credits      Int          @default(60)
-  createdAt    DateTime     @default(now())
+  credits      Int           @default(60)
+  createdAt    DateTime      @default(now())
   redemptions  CreditCode[]
   generations  Generation[]
+  creditSpends CreditSpend[]
 }
 
 model CreditCode {
@@ -25,6 +26,21 @@ model CreditCode {
   redeemedAt   DateTime?
   redeemedById String?
   redeemedBy   User?     @relation(fields: [redeemedById], references: [id])
+}
+
+/// Local ledger for IdeaLaserStudio-shaped spend/refund.
+/// Unique `idempotencyKey` makes `spend` replay-safe (same key = same spendId, no double charge).
+model CreditSpend {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature        String
+  amount         Int
+  idempotencyKey String    @unique
+  refundedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Generation {

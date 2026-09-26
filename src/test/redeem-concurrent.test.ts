@@ -7,6 +7,7 @@ import { signCode } from "@/lib/codes";
 describe("concurrent single-use redemption", () => {
   beforeEach(async () => {
     await prisma.generation.deleteMany();
+    await prisma.creditSpend.deleteMany();
     await prisma.creditCode.deleteMany();
     await prisma.user.deleteMany();
   });

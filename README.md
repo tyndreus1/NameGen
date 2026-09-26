@@ -101,27 +101,35 @@ Aynı seti yeniden üretmek için: `npx tsx scripts/write-docs-samples.ts`
 ## Kredi sistemi
 
 - Yeni hesap ve üretim maliyeti **admin Ayarlar**’dan düzenlenir (`startingCredits`, `generationCost`). Varsayılan 60 / 3. Başlangıcı 0 yapmak, kredi çiftliğini keser: kredi yalnızca koddan gelir.
-- Düşüm sunucuda atomiktir; üretim tamamen başarısızsa iade
-- Bakiye üretim maliyetinin altındaysa üretim reddedilir
+- Bakiye ve fiyat **yalnızca sunucuda** geçerlidir. İstemci gönderdiği kredi / fiyat dikkate alınmaz (`/api/generate` yalnızca `name` + `style` alır; tutar `generationCharge()`).
+- Üretim akışı: `spend(userId, "namegen", amount, idempotencyKey)` → Grok → tamamen başarısızsa `refund(spendId)`. Idempotency anahtarı her üretim isteğinde `crypto.randomUUID()` ile üretilir.
+- `spend` atomiktir, bakiye yetmezse `INSUFFICIENT` fırlatır, aynı anahtar ikinci kez düşmez (`spendId` döner).
 - Top-up: müşteri üstteki **kredi rozetine** tıklayınca açılan pencereden kod girer. Kodlar yalnızca **60 / 120 / 240** kredi taşır
 - Kodlar HMAC-SHA256 ile `CODE_SECRET` kullanılarak imzalanır (`NG60-XXXX-XXXX-XXXX-XXXXXXXX`)
 - Bir kod sistem genelinde **bir kez** kullanılabilir (unique + transaction)
 - Admin UI (`/admin`) ve CLI kod üretir; admin üretilen/kullanılan kodları listeler
 
-### Kredi arayüzü (`src/lib/credits.ts`)
+### Kredi arayüzü (`src/lib/credits/`)
 
-NameGen ileride IdeaLaserStudio içinde bir özellik olacak; kredi birkaç özelliğin (isim üretimi, 3D, …) paylaştığı havuzdan gelecek. Bu yüzden okuma / harcama / iade / kod yükleme tek bir cüzdan arayüzünün arkasındadır. Bugün `localCreditWallet` yerel `User.credits` sütununu kullanır. Paylaşılan havuza geçince yalnızca `creditWallet` export’unu değiştirin — route’lar ve UI `getBalance` / `spend` / `refund` / `redeem` çağırır.
+NameGen ileride IdeaLaserStudio (repo `tyndreus1/idea-mark`) içinde bir özellik olacak; kredi birkaç özelliğin paylaştığı havuzdan gelecek. Route’lar ve UI yalnızca bu dört metoda bağlanır — yerel SQLite’ı HTTP istemcisiyle değiştirmek çağıranları değiştirmez.
 
 ```ts
 export type CreditWallet = {
   getBalance(userId: string): Promise<number>;
-  spend(userId: string, amount: number): Promise<number>;
-  refund(userId: string, amount: number): Promise<number>;
-  redeem(userId: string, rawCode: string): Promise<{ credits: number; added: number; code: string }>;
+  spend(userId: string, feature: string, amount: number, idempotencyKey: string): Promise<string>;
+  refund(spendId: string): Promise<void>;
+  redeem(userId: string, code: string): Promise<{ credits: number; added: number; code: string }>;
 };
 ```
 
-`startingGrant()` ve `generationCharge()` admin ayarından okur. `reserveGenerationCredits` / `refundGenerationCredits` bu tutarla `spend` / `refund` çağıran ince sarmalayıcılardır.
+| Dosya | Rol |
+|---|---|
+| `types.ts` | `CreditWallet` + `NAMEGEN_FEATURE = "namegen"` |
+| `local.ts` | Varsayılan: `User.credits` + `CreditSpend` defteri (atomik düşüm, unique `idempotencyKey`, `refund` `spendId` ile) |
+| `remote.ts` | **STUB** — HTTP henüz yok. `CREDITS_PROVIDER=remote` bunu seçer; `CREDITS_API_URL` / `CREDITS_API_KEY` okunur, `fetch` yazılmamıştır |
+| `index.ts` | `creditWallet` seçimi + `getBalance` / `spend` / `refund` / `redeem` |
+
+`startingGrant()` ve `generationCharge()` admin ayarından okur. `CreditSpend` tablosu için `npx prisma db push` gerekir (yeni kurulum veya bu şema değişikliğinden sonra).
 
 ## Kurulum
 
@@ -183,6 +191,9 @@ npx tsx scripts/preview-designs.ts Merve Zeynep Şükrü
 | `XAI_MAX_RETRIES` | hayır | Kalan slot retry turu; varsayılan `2` |
 | `XAI_TEXT_MODEL` | hayır | Yazım kontrolü (vision); varsayılan `grok-4.6` |
 | `REFERENCE_STORAGE_DIR` | hayır | Referans PNG dizini; varsayılan `data/references` (kalıcı olmalı) |
+| `CREDITS_PROVIDER` | hayır | `local` (varsayılan, SQLite) veya `remote` (IdeaLaserStudio stub; HTTP yok) |
+| `CREDITS_API_URL` | hayır | Gelecekteki paylaşılan kredi API tabanı; yalnızca `remote` için |
+| `CREDITS_API_KEY` | hayır | Gelecekteki paylaşılan kredi API anahtarı; yalnızca `remote` için |
 
 Sırlar asla commit edilmez. `.env` gitignore’dadır.
 

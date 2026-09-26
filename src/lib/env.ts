@@ -90,3 +90,21 @@ export function getReferenceStorageDir(): string {
   const raw = process.env.REFERENCE_STORAGE_DIR?.trim();
   return raw || "data/references";
 }
+
+export type CreditsProvider = "local" | "remote";
+
+/** `local` (default) = SQLite wallet. `remote` = IdeaLaserStudio stub. */
+export function getCreditsProvider(): CreditsProvider {
+  const raw = process.env.CREDITS_PROVIDER?.trim().toLowerCase();
+  return raw === "remote" ? "remote" : "local";
+}
+
+export function getCreditsApiUrl(): string | undefined {
+  const url = process.env.CREDITS_API_URL?.trim();
+  return url || undefined;
+}
+
+export function getCreditsApiKey(): string | undefined {
+  const key = process.env.CREDITS_API_KEY?.trim();
+  return key || undefined;
+}
