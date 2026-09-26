@@ -57,23 +57,31 @@ export function AdminSettings() {
   const [previewName, setPreviewName] = useState("Christopher");
 
   async function reload() {
-    const [cat, ref, set] = await Promise.all([
-      fetch("/api/admin/categories").then((r) => r.json()),
-      fetch("/api/admin/references").then((r) => r.json()),
-      fetch("/api/admin/settings").then((r) => r.json()),
-    ]);
-    setCategories(
-      (cat.categories ?? []).map((row: Category) => ({
-        ...row,
-        ringCount: row.ringCount ?? "two",
-        ringPosition: row.ringPosition ?? "left",
-        enforceRings: row.enforceRings !== false,
-      })),
-    );
-    setReferences(ref.references ?? []);
-    setSettings(set.settings ?? null);
-    setEnvDefaults(set.envDefaults ?? null);
-    setTechnicalRules(set.technicalRules ?? []);
+    try {
+      const [cat, ref, set] = await Promise.all([
+        fetch("/api/admin/categories").then((r) => r.json()),
+        fetch("/api/admin/references").then((r) => r.json()),
+        fetch("/api/admin/settings").then((r) => r.json()),
+      ]);
+      if (set.error || !set.settings) {
+        setError(set.error || "Ayarlar yüklenemedi");
+        return;
+      }
+      setCategories(
+        (cat.categories ?? []).map((row: Category) => ({
+          ...row,
+          ringCount: row.ringCount ?? "two",
+          ringPosition: row.ringPosition ?? "left",
+          enforceRings: row.enforceRings !== false,
+        })),
+      );
+      setReferences(ref.references ?? []);
+      setSettings(set.settings);
+      setEnvDefaults(set.envDefaults ?? null);
+      setTechnicalRules(set.technicalRules ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ayarlar yüklenemedi");
+    }
   }
 
   useEffect(() => {
@@ -365,121 +373,109 @@ export function AdminSettings() {
           value={previewName}
           onChange={(e) => setPreviewName(e.target.value)}
         />
-        <div className="table-wrap" style={{ marginTop: 16 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Sıra</th>
-                <th>Ad</th>
-                <th>Açıklama</th>
-                <th>Prompt / son metin</th>
-                <th>Halka</th>
-                <th>Açık</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((row, index) => (
-                <tr key={row.id}>
-                  <td>
-                    <button className="btn btn-ghost btn-small" type="button" onClick={() => void moveCategory(index, -1)}>
-                      ↑
-                    </button>
-                    <button className="btn btn-ghost btn-small" type="button" onClick={() => void moveCategory(index, 1)}>
-                      ↓
-                    </button>
-                  </td>
-                  <td>
-                    <input
-                      value={row.label}
-                      onChange={(e) =>
-                        setCategories((list) =>
-                          list.map((item) => (item.id === row.id ? { ...item, label: e.target.value } : item)),
-                        )
-                      }
-                      onBlur={() => void patchCategory(row.id, { label: row.label })}
-                    />
-                    <p className="hint">{row.slug}</p>
-                  </td>
-                  <td>
-                    <input
-                      value={row.description}
-                      onChange={(e) =>
-                        setCategories((list) =>
-                          list.map((item) =>
-                            item.id === row.id ? { ...item, description: e.target.value } : item,
-                          ),
-                        )
-                      }
-                      onBlur={() => void patchCategory(row.id, { description: row.description })}
-                    />
-                  </td>
-                  <td>
-                    <textarea
-                      rows={3}
-                      value={row.promptText}
-                      onChange={(e) =>
-                        setCategories((list) =>
-                          list.map((item) => (item.id === row.id ? { ...item, promptText: e.target.value } : item)),
-                        )
-                      }
-                      onBlur={() => void patchCategory(row.id, { promptText: row.promptText })}
-                    />
-                    <p className="hint">Grok’a gidecek tam metin</p>
-                    <textarea
-                      className="prompt-preview"
-                      rows={6}
-                      readOnly
-                      value={categoryPreview(row)}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={row.ringCount}
-                      onChange={(e) => void patchCategory(row.id, { ringCount: e.target.value as RingCount })}
-                    >
-                      <option value="none">Yok</option>
-                      <option value="one">Bir</option>
-                      <option value="two">İki</option>
-                    </select>
-                    <select
-                      value={row.ringPosition}
-                      disabled={row.ringCount !== "one"}
-                      onChange={(e) => void patchCategory(row.id, { ringPosition: e.target.value as RingPosition })}
-                    >
-                      <option value="left">Sol uç</option>
-                      <option value="right">Sağ uç</option>
-                      <option value="first-letter">İlk harf</option>
-                    </select>
-                    <label className="hint">
-                      <input
-                        type="checkbox"
-                        checked={row.enforceRings}
-                        onChange={(e) => void patchCategory(row.id, { enforceRings: e.target.checked })}
-                      />{" "}
-                      Zorla
-                    </label>
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={row.enabled}
-                      onChange={(e) => void patchCategory(row.id, { enabled: e.target.checked })}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      className="btn btn-ghost btn-small"
-                      type="button"
-                      onClick={() => void fetch(`/api/admin/categories/${row.id}`, { method: "DELETE" }).then(reload)}
-                    >
-                      Sil
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="category-list">
+          {categories.map((row, index) => (
+            <article className="category-card" key={row.id}>
+              <div className="category-card-top">
+                <div className="category-order">
+                  <button className="btn btn-ghost btn-small" type="button" onClick={() => void moveCategory(index, -1)}>
+                    ↑
+                  </button>
+                  <button className="btn btn-ghost btn-small" type="button" onClick={() => void moveCategory(index, 1)}>
+                    ↓
+                  </button>
+                </div>
+                <div>
+                  <label>Ad</label>
+                  <input
+                    value={row.label}
+                    onChange={(e) =>
+                      setCategories((list) =>
+                        list.map((item) => (item.id === row.id ? { ...item, label: e.target.value } : item)),
+                      )
+                    }
+                    onBlur={() => void patchCategory(row.id, { label: row.label })}
+                  />
+                  <p className="hint">{row.slug}</p>
+                </div>
+                <div>
+                  <label>Açıklama</label>
+                  <input
+                    value={row.description}
+                    onChange={(e) =>
+                      setCategories((list) =>
+                        list.map((item) =>
+                          item.id === row.id ? { ...item, description: e.target.value } : item,
+                        ),
+                      )
+                    }
+                    onBlur={() => void patchCategory(row.id, { description: row.description })}
+                  />
+                </div>
+                <label className="hint">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(e) => void patchCategory(row.id, { enabled: e.target.checked })}
+                  />{" "}
+                  Açık
+                </label>
+                <button
+                  className="btn btn-ghost btn-small"
+                  type="button"
+                  onClick={() => void fetch(`/api/admin/categories/${row.id}`, { method: "DELETE" }).then(reload)}
+                >
+                  Sil
+                </button>
+              </div>
+              <label>Kategori promptu</label>
+              <textarea
+                rows={3}
+                value={row.promptText}
+                onChange={(e) =>
+                  setCategories((list) =>
+                    list.map((item) => (item.id === row.id ? { ...item, promptText: e.target.value } : item)),
+                  )
+                }
+                onBlur={() => void patchCategory(row.id, { promptText: row.promptText })}
+              />
+              <div className="settings-grid">
+                <div>
+                  <label>Halka</label>
+                  <select
+                    value={row.ringCount}
+                    onChange={(e) => void patchCategory(row.id, { ringCount: e.target.value as RingCount })}
+                  >
+                    <option value="none">Yok</option>
+                    <option value="one">Bir</option>
+                    <option value="two">İki (uçlar)</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Tek halka konumu</label>
+                  <select
+                    value={row.ringPosition}
+                    disabled={row.ringCount !== "one"}
+                    onChange={(e) => void patchCategory(row.id, { ringPosition: e.target.value as RingPosition })}
+                  >
+                    <option value="left">Sol uç</option>
+                    <option value="right">Sağ uç</option>
+                    <option value="first-letter">İlk harf</option>
+                  </select>
+                </div>
+              </div>
+              <label className="hint">
+                <input
+                  type="checkbox"
+                  checked={row.enforceRings}
+                  onChange={(e) => void patchCategory(row.id, { enforceRings: e.target.checked })}
+                />{" "}
+                Halka kontrolünü zorla
+              </label>
+              <label>Grok’a gidecek tam metin ({previewName || "Christopher"})</label>
+              <textarea className="prompt-preview" rows={7} readOnly value={categoryPreview(row)} />
+            </article>
+          ))}
         </div>
       </section>
 

@@ -231,9 +231,33 @@ textarea {
   background: #fff;
 }
 
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+.category-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: #fff;
+}
+.category-card-top {
+  display: grid;
+  grid-template-columns: auto 1.2fr 1.4fr auto auto;
+  gap: 10px;
+  align-items: start;
+}
+.category-order {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .prompt-preview {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.4;
   background: #f7f2ea;
 }
 .tech-rules ul {
@@ -271,7 +295,7 @@ textarea {
 }
 
 @media (max-width: 800px) {
-  .settings-grid, .ref-grid { grid-template-columns: 1fr; }
+  .settings-grid, .ref-grid, .category-card-top { grid-template-columns: 1fr; }
 }
 
 .hint, .error, .ok {
