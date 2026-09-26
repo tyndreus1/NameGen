@@ -40,19 +40,23 @@ model Generation {
   apiCostUsd    Float    @default(0)
   apiCostTicks  BigInt   @default(0)
   imageModel    String?
+  usedRefs      String   @default("[]")
   createdAt     DateTime @default(now())
 }
 
 model Category {
-  id          String               @id @default(cuid())
-  slug        String               @unique
-  label       String
-  description String               @default("")
-  promptText  String
-  enabled     Boolean              @default(true)
-  sortOrder   Int                  @default(0)
-  createdAt   DateTime             @default(now())
-  references  CategoryReference[]
+  id           String               @id @default(cuid())
+  slug         String               @unique
+  label        String
+  description  String               @default("")
+  promptText   String
+  ringCount    String               @default("two")
+  ringPosition String               @default("left")
+  enforceRings Boolean              @default(true)
+  enabled      Boolean              @default(true)
+  sortOrder    Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  references   CategoryReference[]
 }
 
 model StyleReference {
@@ -84,5 +88,6 @@ model AppSettings {
   nPerBatch  Int?
   resolution String?
   maxRetries Int?
+  basePrompt String?
   updatedAt  DateTime @updatedAt
 }

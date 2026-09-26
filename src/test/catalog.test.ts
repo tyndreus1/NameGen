@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { ensureCatalog, slugify } from "@/lib/catalog/seed";
 import { loadCategoryRefs } from "@/lib/catalog/refs";
-import { cleanReferenceUpload } from "@/lib/catalog/storage";
+import { cleanReferenceUpload, writeReferenceFile } from "@/lib/catalog/storage";
 import { saveGenerationSettings } from "@/lib/catalog/settings";
 import { generateDesigns } from "@/lib/generate/pipeline";
+import { DEFAULT_BASE_PROMPT, previewGenerationPrompt } from "@/lib/generate/prompt";
+import { ringPolicyFrom } from "@/lib/generate/ring-policy";
 import type { GenerateImagesArgs, XaiClient } from "@/lib/generate/xai-client";
-import { fakePendantPng } from "./helpers/pendant";
+import { fakeLeftRingPendantPng, fakePendantPng } from "./helpers/pendant";
 import { blank, fillRect } from "./helpers/pendant";
 import { binaryToPng } from "@/lib/generate/postprocess";
 
@@ -52,6 +54,7 @@ describe("admin catalog", () => {
       "elegant",
     ]);
     expect(categories[0]!.label).toContain("Klasik");
+    expect(categories.every((row) => row.ringCount === "two" && row.enforceRings)).toBe(true);
     const refs = await prisma.styleReference.findMany();
     expect(refs.length).toBe(5);
     expect(refs.some((row) => row.writtenName === "merve")).toBe(true);
@@ -155,6 +158,76 @@ describe("admin catalog", () => {
     await generateDesigns("Merve", "hearts", 1, mockClient(hearts));
     expect(hearts.prompts[0]).toMatch(/heart/i);
     expect(hearts.refs[0]!.length).toBe(1);
+  }, 40000);
+
+  it("sends only that category's refs and a one-ring prompt that matches the preview", async () => {
+    const vertical = await prisma.category.create({
+      data: {
+        slug: "vertical",
+        label: "Vertical",
+        description: "Vertical Handwriting with one loop",
+        promptText: "Only letters and ONE ring on the first letter, fancy first letter, thin handwriting.",
+        ringCount: "one",
+        ringPosition: "left",
+        enforceRings: true,
+        sortOrder: 40,
+      },
+    });
+    const angela = await prisma.styleReference.create({
+      data: { filename: "angela.png", writtenName: "angela", enabled: true, onePiece: true },
+    });
+    writeReferenceFile(angela.id, await fakeLeftRingPendantPng());
+    await prisma.categoryReference.create({
+      data: { categoryId: vertical.id, referenceId: angela.id },
+    });
+
+    const assigned = await loadCategoryRefs("Christopher", "vertical", 4);
+    expect(assigned.map((ref) => ref.writtenName)).toEqual(["angela"]);
+
+    const capture = { prompts: [] as string[], refs: [] as string[][] };
+    const result = await generateDesigns("Christopher", "vertical", 1, {
+      async generateImages(args: GenerateImagesArgs) {
+        capture.prompts.push(args.prompt);
+        capture.refs.push(args.references.map((ref) => ref.dataUrl));
+        return {
+          images: [{ buffer: await fakeLeftRingPendantPng() }],
+          cost: 0,
+          costTicks: 0,
+          model: args.model ?? "grok-imagine-image-2.0",
+          endpoint: args.references.length ? "edits" : "generations",
+        };
+      },
+      async transcribeName() {
+        return { text: "Christopher", cost: 0, costTicks: 0 };
+      },
+    });
+
+    expect(capture.prompts[0]).toContain("exactly one small round open ring");
+    expect(capture.prompts[0]).not.toMatch(/far left end and the far right end/i);
+    expect(capture.prompts[0]).not.toMatch(/exactly two rings/i);
+    expect(capture.prompts[0]).not.toMatch(/bold, thick, flowing retro/i);
+    expect(result.usedRefs.map((ref) => ref.writtenName)).toEqual(["angela"]);
+    expect(result.usedRefs).toHaveLength(1);
+    expect(capture.refs[0]).toHaveLength(1);
+
+    const preview = previewGenerationPrompt({
+      name: "Christopher",
+      ornament: vertical.promptText,
+      basePrompt: DEFAULT_BASE_PROMPT,
+      ring: ringPolicyFrom(vertical),
+      hasReferences: true,
+    });
+    expect(capture.prompts[0]).toBe(preview);
+    expect(result.prompt).toBe(preview);
+    expect(result.grokAccepted).toBe(1);
+  }, 40000);
+
+  it("uses the admin-saved base prompt in the sent Grok text", async () => {
+    await saveGenerationSettings({ basePrompt: "CUSTOM_BASE_PROMPT_TOKEN no rings here." });
+    const capture = { prompts: [] as string[], refs: [] as string[][] };
+    await generateDesigns("Merve", "classic", 1, mockClient(capture));
+    expect(capture.prompts[0]).toContain("CUSTOM_BASE_PROMPT_TOKEN");
+    expect(capture.prompts[0]).not.toMatch(/bold, thick, flowing retro/i);
   }, 40000);
 
   it("saves live generation settings over env defaults", async () => {

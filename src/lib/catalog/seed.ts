@@ -36,9 +36,28 @@ export async function ensureCatalog(): Promise<void> {
   return seedInflight;
 }
 
+const LEGACY_TWO_RING_ORNAMENTS: Partial<Record<StyleId, string>> = {
+  classic: "No hearts, no stars, no butterflies - only letters, swash, flourishes and the two end rings.",
+  elegant:
+    "Keep the design elegant and minimal: only letters, a clean swash, curly flourishes and the two end rings. No hearts, no stars, no butterflies.",
+};
+
+async function migrateLegacyOrnaments(): Promise<void> {
+  for (const [slug, oldText] of Object.entries(LEGACY_TWO_RING_ORNAMENTS)) {
+    if (!oldText) continue;
+    await prisma.category.updateMany({
+      where: { slug, promptText: oldText },
+      data: { promptText: STYLE_ORNAMENTS[slug as StyleId] },
+    });
+  }
+}
+
 async function seedCatalog(): Promise<void> {
   const existing = await prisma.category.count();
-  if (existing > 0) return;
+  if (existing > 0) {
+    await migrateLegacyOrnaments();
+    return;
+  }
 
   const refIds: Record<string, string> = {};
   for (const item of REFERENCE_CATALOG) {
@@ -63,6 +82,9 @@ async function seedCatalog(): Promise<void> {
         label: STYLE_LABELS[slug],
         description: DESCRIPTIONS[slug],
         promptText: STYLE_ORNAMENTS[slug],
+        ringCount: "two",
+        ringPosition: "left",
+        enforceRings: true,
         enabled: true,
         sortOrder: index,
       },

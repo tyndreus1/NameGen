@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { hasEndRings } from "@/lib/generate/rings";
-import { blank, fillRect, pendantBinary, ring } from "./helpers/pendant";
+import { checkRings, hasEndRings } from "@/lib/generate/rings";
+import { blank, fillRect, leftRingPendantBinary, pendantBinary, ring } from "./helpers/pendant";
+import { ringPolicyFrom } from "@/lib/generate/ring-policy";
 
 describe("end-ring detection", () => {
   it("accepts compact interior holes at both horizontal extremes", () => {
@@ -54,5 +55,23 @@ describe("end-ring detection", () => {
     expect(check.ok).toBe(true);
     expect(check.left!.cx).toBeLessThan(80);
     expect(check.right!.cx).toBeGreaterThan(320);
+  });
+
+  it("accepts a one-ring design when the category says one left ring", () => {
+    const image = leftRingPendantBinary();
+    expect(hasEndRings(image).ok).toBe(false);
+    expect(
+      checkRings(image, ringPolicyFrom({ ringCount: "one", ringPosition: "left", enforceRings: true })).ok,
+    ).toBe(true);
+    expect(
+      checkRings(image, ringPolicyFrom({ ringCount: "two", ringPosition: "left", enforceRings: true })).ok,
+    ).toBe(false);
+  });
+
+  it("skips the ring requirement when enforcement is off", () => {
+    expect(
+      checkRings(leftRingPendantBinary(), ringPolicyFrom({ ringCount: "two", enforceRings: false })).ok,
+    ).toBe(true);
+    expect(checkRings(pendantBinary(), ringPolicyFrom({ ringCount: "none", enforceRings: true })).ok).toBe(true);
   });
 });

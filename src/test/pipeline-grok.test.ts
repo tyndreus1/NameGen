@@ -3,7 +3,8 @@ import { usdToTicks } from "@/lib/cost";
 import { generateDesigns } from "@/lib/generate/pipeline";
 import { validateGrokRaster } from "@/lib/generate/validate";
 import type { GenerateImagesArgs, XaiClient } from "@/lib/generate/xai-client";
-import { blank, fakePendantPng, fillRect } from "./helpers/pendant";
+import { blank, fakeLeftRingPendantPng, fakePendantPng, fillRect } from "./helpers/pendant";
+import { ringPolicyFrom } from "@/lib/generate/ring-policy";
 import { binaryToPng } from "@/lib/generate/postprocess";
 import { prisma } from "@/lib/db";
 
@@ -171,6 +172,26 @@ describe("Grok raster validation", () => {
       expect(checked.svg).toMatch(/<path/i);
       expect(checked.transcribed).toBe("Merve");
     }
+  }, 20000);
+
+  it("accepts a one-ring design when the category says one ring", async () => {
+    const checked = await validateGrokRaster(
+      await fakeLeftRingPendantPng(),
+      "Merve",
+      mockClient({ transcribe: "Merve" }),
+      ringPolicyFrom({ ringCount: "one", ringPosition: "left", enforceRings: true }),
+    );
+    expect(checked.ok).toBe(true);
+  }, 20000);
+
+  it("rejects a one-ring design when the category still requires two rings", async () => {
+    const checked = await validateGrokRaster(
+      await fakeLeftRingPendantPng(),
+      "Merve",
+      mockClient({ transcribe: "Merve" }),
+    );
+    expect(checked.ok).toBe(false);
+    if (!checked.ok) expect(checked.reason).toMatch(/ring/i);
   }, 20000);
 
   it("rejects a far detached island that cannot be bridged", async () => {

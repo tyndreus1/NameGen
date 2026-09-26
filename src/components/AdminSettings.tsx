@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { buildGenerationPrompt } from "@/lib/generate/prompt";
+import { ringPolicyFrom, type RingCount, type RingPosition } from "@/lib/generate/ring-policy";
 
 type Category = {
   id: string;
@@ -8,6 +10,9 @@ type Category = {
   label: string;
   description: string;
   promptText: string;
+  ringCount: RingCount;
+  ringPosition: RingPosition;
+  enforceRings: boolean;
   enabled: boolean;
   sortOrder: number;
   referenceIds: string[];
@@ -32,6 +37,7 @@ type Settings = {
   nPerBatch: number;
   resolution: string;
   maxRetries: number;
+  basePrompt: string;
 };
 
 export function AdminSettings() {
@@ -41,9 +47,14 @@ export function AdminSettings() {
   const [envDefaults, setEnvDefaults] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [technicalRules, setTechnicalRules] = useState<string[]>([]);
   const [newLabel, setNewLabel] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newPrompt, setNewPrompt] = useState("");
+  const [newRingCount, setNewRingCount] = useState<RingCount>("two");
+  const [newRingPosition, setNewRingPosition] = useState<RingPosition>("left");
+  const [newEnforceRings, setNewEnforceRings] = useState(true);
+  const [previewName, setPreviewName] = useState("Christopher");
 
   async function reload() {
     const [cat, ref, set] = await Promise.all([
@@ -51,10 +62,18 @@ export function AdminSettings() {
       fetch("/api/admin/references").then((r) => r.json()),
       fetch("/api/admin/settings").then((r) => r.json()),
     ]);
-    setCategories(cat.categories ?? []);
+    setCategories(
+      (cat.categories ?? []).map((row: Category) => ({
+        ...row,
+        ringCount: row.ringCount ?? "two",
+        ringPosition: row.ringPosition ?? "left",
+        enforceRings: row.enforceRings !== false,
+      })),
+    );
     setReferences(ref.references ?? []);
     setSettings(set.settings ?? null);
     setEnvDefaults(set.envDefaults ?? null);
+    setTechnicalRules(set.technicalRules ?? []);
   }
 
   useEffect(() => {
@@ -87,6 +106,9 @@ export function AdminSettings() {
         label: newLabel,
         description: newDescription,
         promptText: newPrompt,
+        ringCount: newRingCount,
+        ringPosition: newRingPosition,
+        enforceRings: newEnforceRings,
       }),
     });
     const data = await response.json();
@@ -97,6 +119,9 @@ export function AdminSettings() {
     setNewLabel("");
     setNewDescription("");
     setNewPrompt("");
+    setNewRingCount("two");
+    setNewRingPosition("left");
+    setNewEnforceRings(true);
     await reload();
   }
 
@@ -148,6 +173,17 @@ export function AdminSettings() {
       body: JSON.stringify(body),
     });
     await reload();
+  }
+
+  function categoryPreview(row: Pick<Category, "promptText" | "ringCount" | "ringPosition" | "enforceRings">) {
+    if (!settings) return "";
+    return buildGenerationPrompt({
+      name: previewName.trim() || "Christopher",
+      ornament: row.promptText,
+      basePrompt: settings.basePrompt,
+      ring: ringPolicyFrom(row),
+      hasReferences: true,
+    });
   }
 
   if (!settings) return <p className="hint">Ayarlar yükleniyor…</p>;
@@ -240,6 +276,26 @@ export function AdminSettings() {
             />
           </div>
         </div>
+        <label htmlFor="basePrompt">Ortak temel prompt (her kategoriye eklenir)</label>
+        <p className="hint">
+          Stil, halka sayısı ve süs buraya yazılmaz. Bunlar kategori ayarındadır. Bu metin Grok’a her istekte gider.
+        </p>
+        <textarea
+          id="basePrompt"
+          rows={5}
+          value={settings.basePrompt}
+          onChange={(e) => setSettings({ ...settings, basePrompt: e.target.value })}
+        />
+        <div className="tech-rules">
+          <p className="hint">
+            Teknik doğrulama (kodda sabit; ürün stili değil — kapatılamaz):
+          </p>
+          <ul>
+            {technicalRules.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
         <button className="btn btn-primary" type="submit">
           Ayarları kaydet
         </button>
@@ -257,17 +313,58 @@ export function AdminSettings() {
             onChange={(e) => setNewDescription(e.target.value)}
             placeholder="Swash ve kıvrımlarda kalpler."
           />
-          <label htmlFor="cat-prompt">Grok süs / stil cümlesi</label>
+          <label htmlFor="cat-prompt">Kategoriye özel prompt (stil / süs)</label>
           <textarea
             id="cat-prompt"
             value={newPrompt}
             onChange={(e) => setNewPrompt(e.target.value)}
             rows={3}
           />
+          <div className="settings-grid">
+            <div>
+              <label htmlFor="new-ring-count">Halka</label>
+              <select
+                id="new-ring-count"
+                value={newRingCount}
+                onChange={(e) => setNewRingCount(e.target.value as RingCount)}
+              >
+                <option value="none">Yok</option>
+                <option value="one">Bir</option>
+                <option value="two">İki (uçlar)</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="new-ring-pos">Tek halka konumu</label>
+              <select
+                id="new-ring-pos"
+                value={newRingPosition}
+                disabled={newRingCount !== "one"}
+                onChange={(e) => setNewRingPosition(e.target.value as RingPosition)}
+              >
+                <option value="left">Sol uç</option>
+                <option value="right">Sağ uç</option>
+                <option value="first-letter">İlk harf</option>
+              </select>
+            </div>
+          </div>
+          <label className="hint">
+            <input
+              type="checkbox"
+              checked={newEnforceRings}
+              onChange={(e) => setNewEnforceRings(e.target.checked)}
+            />{" "}
+            Halka kontrolünü zorla
+          </label>
           <button className="btn btn-accent" type="submit" disabled={!newLabel.trim() || !newPrompt.trim()}>
             Kategori ekle
           </button>
         </form>
+        <label htmlFor="preview-name">Örnek isim (son prompt önizlemesi)</label>
+        <input
+          id="preview-name"
+          value={previewName}
+          onChange={(e) => setPreviewName(e.target.value)}
+        />
         <div className="table-wrap" style={{ marginTop: 16 }}>
           <table>
             <thead>
@@ -275,7 +372,8 @@ export function AdminSettings() {
                 <th>Sıra</th>
                 <th>Ad</th>
                 <th>Açıklama</th>
-                <th>Prompt</th>
+                <th>Prompt / son metin</th>
+                <th>Halka</th>
                 <th>Açık</th>
                 <th></th>
               </tr>
@@ -327,6 +425,40 @@ export function AdminSettings() {
                       }
                       onBlur={() => void patchCategory(row.id, { promptText: row.promptText })}
                     />
+                    <p className="hint">Grok’a gidecek tam metin</p>
+                    <textarea
+                      className="prompt-preview"
+                      rows={6}
+                      readOnly
+                      value={categoryPreview(row)}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={row.ringCount}
+                      onChange={(e) => void patchCategory(row.id, { ringCount: e.target.value as RingCount })}
+                    >
+                      <option value="none">Yok</option>
+                      <option value="one">Bir</option>
+                      <option value="two">İki</option>
+                    </select>
+                    <select
+                      value={row.ringPosition}
+                      disabled={row.ringCount !== "one"}
+                      onChange={(e) => void patchCategory(row.id, { ringPosition: e.target.value as RingPosition })}
+                    >
+                      <option value="left">Sol uç</option>
+                      <option value="right">Sağ uç</option>
+                      <option value="first-letter">İlk harf</option>
+                    </select>
+                    <label className="hint">
+                      <input
+                        type="checkbox"
+                        checked={row.enforceRings}
+                        onChange={(e) => void patchCategory(row.id, { enforceRings: e.target.checked })}
+                      />{" "}
+                      Zorla
+                    </label>
                   </td>
                   <td>
                     <input

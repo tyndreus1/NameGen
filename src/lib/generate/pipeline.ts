@@ -1,16 +1,23 @@
 import { VARIATION_COUNT, fontStyleForSlug, type StyleId } from "../constants";
 import { addTicks, ticksToUsd } from "../cost";
 import { yieldEventLoop } from "./offload";
-import { loadCategoryRefs } from "../catalog/refs";
+import { loadCategoryRefs, type CatalogRef } from "../catalog/refs";
 import { resolveGenerationSettings, type ResolvedSettings } from "../catalog/settings";
 import { buildVariations, composeNameSvg } from "./vector";
 import { processSvgComposition, type ProcessedDesign } from "./postprocess";
 import { createXaiClient, type XaiClient } from "./xai-client";
 import { buildGenerationPrompt, ornamentForStyle } from "./prompt";
 import { referencesForBatch } from "./references";
+import { DEFAULT_RING_POLICY, ringPolicyFrom, type RingPolicy } from "./ring-policy";
 import { validateGrokRaster } from "./validate";
 import { prisma } from "../db";
 import { ensureCatalog } from "../catalog/seed";
+
+export type UsedRef = {
+  id: string;
+  writtenName: string | null;
+  filename: string;
+};
 
 export type GeneratedDesign = ProcessedDesign & {
   index: number;
@@ -33,6 +40,8 @@ export type GenerateResult = {
   quality: string | null;
   batches: number;
   nPerBatch: number;
+  prompt: string;
+  usedRefs: UsedRef[];
 };
 
 function assertName(name: string): string {
@@ -49,15 +58,31 @@ function assertName(name: string): string {
   return trimmed;
 }
 
+async function loadCategoryContext(slug: string): Promise<{
+  ornament: string;
+  ring: RingPolicy;
+}> {
+  await ensureCatalog();
+  const category = await prisma.category.findUnique({ where: { slug } });
+  if (!category) {
+    return { ornament: ornamentForStyle(slug), ring: DEFAULT_RING_POLICY };
+  }
+  return {
+    ornament: category.promptText || ornamentForStyle(slug),
+    ring: ringPolicyFrom(category),
+  };
+}
+
 export async function deterministicDesign(
   name: string,
   style: string,
   index: number,
+  ring: RingPolicy = DEFAULT_RING_POLICY,
 ): Promise<GeneratedDesign> {
   const fontStyle: StyleId = fontStyleForSlug(style);
   const variation = buildVariations(name, fontStyle, VARIATION_COUNT)[index];
   if (!variation) throw new Error("Varyasyon üretilemedi");
-  const composition = composeNameSvg(name, fontStyle, variation);
+  const composition = composeNameSvg(name, fontStyle, variation, ring);
   const processed = await processSvgComposition(
     composition.svg,
     composition.rings,
@@ -71,17 +96,17 @@ async function fillWithFallback(
   style: string,
   needed: number,
   startIndex: number,
+  ring: RingPolicy,
 ): Promise<GeneratedDesign[]> {
   return Promise.all(
-    Array.from({ length: needed }, (_, offset) => deterministicDesign(name, style, startIndex + offset)),
+    Array.from({ length: needed }, (_, offset) =>
+      deterministicDesign(name, style, startIndex + offset, ring),
+    ),
   );
 }
 
-async function ornamentForCategory(slug: string): Promise<string> {
-  await ensureCatalog();
-  const category = await prisma.category.findUnique({ where: { slug } });
-  if (category?.promptText) return category.promptText;
-  return ornamentForStyle(slug);
+function toUsedRef(ref: CatalogRef): UsedRef {
+  return { id: ref.id, writtenName: ref.writtenName, filename: ref.filename };
 }
 
 export async function generateDesigns(
@@ -99,30 +124,37 @@ export async function generateDesigns(
   const batches = settings.batches;
   const nPerBatch = settings.nPerBatch;
   const quality = settings.quality;
+  const category = await loadCategoryContext(style);
 
   const accepted: GeneratedDesign[] = [];
   let attempts = 0;
   let apiCostUsd = 0;
   let apiCostTicks = 0;
   let batchCursor = 0;
+  let prompt = "";
+  const usedById = new Map<string, UsedRef>();
 
   if (resolved) {
     const configuredRefs = settings.refCount;
     const pool =
       configuredRefs === 0 ? [] : await loadCategoryRefs(name, style, Math.max(configuredRefs, batches));
     const effectiveRefCount = pool.length === 0 ? 0 : configuredRefs;
-    const ornament = await ornamentForCategory(style);
-    const prompt = buildGenerationPrompt(name, ornament, effectiveRefCount);
+    prompt = buildGenerationPrompt({
+      name,
+      ornament: category.ornament,
+      basePrompt: settings.basePrompt,
+      ring: category.ring,
+      hasReferences: effectiveRefCount > 0,
+    });
 
     const requestBatch = async (n: number) => {
-      const references = referencesForBatch(pool, batchCursor, effectiveRefCount).map((ref) => ({
-        dataUrl: ref.dataUrl,
-      }));
+      const references = referencesForBatch(pool, batchCursor, effectiveRefCount);
+      for (const ref of references) usedById.set(ref.id, toUsedRef(ref));
       batchCursor++;
       attempts++;
       return resolved.generateImages({
         prompt,
-        references,
+        references: references.map((ref) => ({ dataUrl: ref.dataUrl })),
         n,
         model: settings.imageModel,
         quality: settings.quality,
@@ -135,7 +167,7 @@ export async function generateDesigns(
         if (accepted.length >= count) break;
         await yieldEventLoop();
         try {
-          const checked = await validateGrokRaster(image.buffer, name, visionClient);
+          const checked = await validateGrokRaster(image.buffer, name, visionClient, category.ring);
           apiCostTicks = addTicks(apiCostTicks, checked.visionCostTicks);
           apiCostUsd += checked.visionCost > 0 ? checked.visionCost : ticksToUsd(checked.visionCostTicks);
           if (!checked.ok) continue;
@@ -193,7 +225,13 @@ export async function generateDesigns(
   }
 
   if (accepted.length < count) {
-    const fallbacks = await fillWithFallback(name, style, count - accepted.length, accepted.length);
+    const fallbacks = await fillWithFallback(
+      name,
+      style,
+      count - accepted.length,
+      accepted.length,
+      category.ring,
+    );
     accepted.push(...fallbacks);
   }
 
@@ -220,5 +258,7 @@ export async function generateDesigns(
     quality: grokAttempted ? quality : null,
     batches,
     nPerBatch,
+    prompt,
+    usedRefs: [...usedById.values()],
   };
 }

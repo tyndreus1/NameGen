@@ -9,9 +9,16 @@ process.env.DATABASE_URL ??= "file:./test.db";
 process.env.REFERENCE_STORAGE_DIR ??= "data/test-references";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
-if (process.env.DATABASE_URL === "file:./test.db" && !fs.existsSync(dbPath)) {
-  execSync("npx prisma db push --skip-generate", {
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: "file:./test.db" },
-  });
+if (process.env.DATABASE_URL === "file:./test.db") {
+  if (!fs.existsSync(dbPath)) {
+    execSync("npx prisma db push --skip-generate", {
+      stdio: "inherit",
+      env: { ...process.env, DATABASE_URL: "file:./test.db" },
+    });
+  } else {
+    execSync("npx prisma db push --skip-generate", {
+      stdio: "pipe",
+      env: { ...process.env, DATABASE_URL: "file:./test.db" },
+    });
+  }
 }

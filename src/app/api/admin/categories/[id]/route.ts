@@ -8,6 +8,9 @@ const patchSchema = z.object({
   label: z.string().min(1).max(80).optional(),
   description: z.string().max(200).optional(),
   promptText: z.string().min(1).max(2000).optional(),
+  ringCount: z.enum(["none", "one", "two"]).optional(),
+  ringPosition: z.enum(["left", "right", "first-letter"]).optional(),
+  enforceRings: z.boolean().optional(),
   enabled: z.boolean().optional(),
 });
 

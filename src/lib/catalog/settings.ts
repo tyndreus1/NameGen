@@ -9,6 +9,7 @@ import {
   getXaiResolution,
   type XaiQuality,
 } from "../env";
+import { DEFAULT_BASE_PROMPT } from "../generate/prompt";
 
 export type ResolvedSettings = {
   imageModel: string;
@@ -18,6 +19,7 @@ export type ResolvedSettings = {
   nPerBatch: number;
   resolution: "1k" | "2k";
   maxRetries: number;
+  basePrompt: string;
   source: "env" | "mixed";
 };
 
@@ -30,6 +32,7 @@ export function envSettings(): ResolvedSettings {
     nPerBatch: getXaiNPerBatch(),
     resolution: getXaiResolution(),
     maxRetries: getXaiMaxRetries(),
+    basePrompt: DEFAULT_BASE_PROMPT,
     source: "env",
   };
 }
@@ -61,6 +64,7 @@ export async function resolveGenerationSettings(): Promise<ResolvedSettings> {
     nPerBatch: row.nPerBatch ?? defaults.nPerBatch,
     resolution: asResolution(row.resolution) ?? defaults.resolution,
     maxRetries: row.maxRetries ?? defaults.maxRetries,
+    basePrompt: row.basePrompt?.trim() || defaults.basePrompt,
     source: "mixed",
   };
 }
@@ -73,6 +77,7 @@ export type SettingsPatch = {
   nPerBatch?: number | null;
   resolution?: string | null;
   maxRetries?: number | null;
+  basePrompt?: string | null;
 };
 
 export async function saveGenerationSettings(patch: SettingsPatch): Promise<ResolvedSettings> {

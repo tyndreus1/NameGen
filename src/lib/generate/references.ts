@@ -39,6 +39,7 @@ export function isSameNameAsReference(name: string, ref: ReferenceImage): boolea
   return ref.names.some((n) => n === needle);
 }
 
+/** Seed-time preference only. Live generation uses loadCategoryRefs (DB assignments). */
 export function pickReferenceIds(name: string, style: StyleId, count = 2): ReferenceId[] {
   const preferred = STYLE_PREFERENCE[style];
   const picked: ReferenceId[] = [];

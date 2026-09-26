@@ -1,39 +1,33 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { StyleId } from "../constants";
+import { DEFAULT_RING_POLICY, ringInstruction, type RingPolicy } from "./ring-policy";
 
-const FALLBACK_STYLE_DESCRIPTION =
-  "Laser-cut metal name necklace pendant design, flat vector silhouette, pure solid black on a plain white background, no shading, no gradients, no texture, no 3D, no chain. Bold, thick, flowing retro brush script with every letter joined to the next so the whole design is ONE single connected solid black piece. A long elegant swash flows from the letter tails underneath the entire name and ties back into the first letter. A small round open ring (circle with a hole) at the far left end and the far right end for attaching a chain, joined by curly flourishes. Centered horizontal composition, wide banner format, generous white margin. No other text, no floating pieces.";
+/** Shared technical base. Editable in admin Settings — not a hidden style. */
+export const DEFAULT_BASE_PROMPT =
+  "Laser-cut metal name jewelry design, flat vector silhouette, pure solid black on a plain white background, no shading, no gradients, no texture, no 3D, no chain. Every letter joined to the next so the whole design is ONE single connected solid black piece. Centered composition, generous white margin. No other text, no floating pieces.";
 
-export function styleDescriptionPath(): string {
-  return path.join(process.cwd(), "prompts", "style-description.md");
-}
+export const TECHNICAL_RULES = [
+  "Saf siyah-beyaz: gri piksel kabul edilmez.",
+  "Tek bağlı parça: yüzen / kopuk parçalar reddedilir.",
+  "Halka kontrolü yalnızca kategori ‘halkayı zorla’ açıksa çalışır; sayı ve konum o kategorinin ayarına göre değişir.",
+] as const;
 
-export function loadStyleDescription(): string {
-  try {
-    const raw = fs.readFileSync(styleDescriptionPath(), "utf8");
-    return raw
-      .split("\n")
-      .filter((line) => !line.startsWith("#"))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-  } catch {
-    return FALLBACK_STYLE_DESCRIPTION;
-  }
-}
+export type PromptInput = {
+  name: string;
+  ornament: string;
+  basePrompt: string;
+  ring: RingPolicy;
+  hasReferences: boolean;
+};
 
 export const STYLE_ORNAMENTS: Record<StyleId, string> = {
-  classic:
-    "No hearts, no stars, no butterflies - only letters, swash, flourishes and the two end rings.",
+  classic: "No hearts, no stars, no butterflies - only letters and flourishes.",
   hearts:
     "Weave small solid hearts into the design: one heart in the left flourish and one heart hanging at the center of the underline swash, all fused to the piece.",
-  star:
-    "Add one small solid four-pointed star fused into the right-side flourish, touching the swash, plus no floating pieces.",
+  star: "Add one small solid four-pointed star fused into the right-side flourish, touching the swash, plus no floating pieces.",
   butterfly:
     "Add one small solid butterfly silhouette perched on the top right of the name, touching and fused to the last letter, plus a small heart at the center of the underline swash.",
   elegant:
-    "Keep the design elegant and minimal: only letters, a clean swash, curly flourishes and the two end rings. No hearts, no stars, no butterflies.",
+    "Keep the design elegant and minimal: only letters and curly flourishes. No hearts, no stars, no butterflies.",
 };
 
 const TURKISH_HINT: Record<string, string> = {
@@ -70,7 +64,7 @@ export function turkishLetterInstructions(name: string): string {
   }
   if (!hints.length) return "";
   const letters = [...name].join(", ");
-  return ` Letters, in order: ${letters}. IMPORTANT Turkish letters: ${hints.join(" ")} Exactly two rings.`;
+  return ` Letters, in order: ${letters}. IMPORTANT Turkish letters: ${hints.join(" ")}`;
 }
 
 export function ornamentForStyle(style: string): string {
@@ -78,38 +72,45 @@ export function ornamentForStyle(style: string): string {
   return style;
 }
 
-export function buildTextOnlyPrompt(name: string, styleOrOrnament: string): string {
-  const spelled = letterSpelling(name);
-  const turkish = turkishLetterInstructions(name);
-  return [
-    loadStyleDescription(),
-    `Create a NEW pendant in exactly this style for the name "${name}". The text must read exactly "${name}" (${spelled}) and nothing else.${turkish}`,
-    ornamentForStyle(styleOrOrnament),
-    `Pure solid black silhouette on a plain white background, flat, no shading, no gradient, no outline, no texture, no 3D, no chain, no other text.`,
-  ]
+function collapse(parts: string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter(Boolean)
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-export function buildGenerationPrompt(name: string, styleOrOrnament: string, refCount: number): string {
-  return refCount <= 0 ? buildTextOnlyPrompt(name, styleOrOrnament) : buildEditPrompt(name, styleOrOrnament);
+export function buildGenerationPrompt(input: PromptInput): string {
+  const spelled = letterSpelling(input.name);
+  const turkish = turkishLetterInstructions(input.name);
+  const base = input.basePrompt.trim() || DEFAULT_BASE_PROMPT;
+  const lead = input.hasReferences
+    ? `The reference images show the target style. Create a NEW design in exactly this style for the name "${input.name}".`
+    : `Create a NEW design for the name "${input.name}".`;
+
+  return collapse([
+    base,
+    `${lead} The text must read exactly "${input.name}" (${spelled}) and nothing else.${turkish}`,
+    ringInstruction(input.ring),
+    input.ornament,
+  ]);
 }
 
-export function buildEditPrompt(name: string, styleOrOrnament: string): string {
-  const spelled = letterSpelling(name);
-  const turkish = turkishLetterInstructions(name);
+export function previewGenerationPrompt(input: PromptInput): string {
+  return buildGenerationPrompt(input);
+}
 
-  return [
-    `The reference images show a laser-cut name necklace pendant style.`,
-    `Create a NEW pendant in exactly this style for the name "${name}". The text must read exactly "${name}" (${spelled}) and nothing else.${turkish}`,
-    `Same bold, thick, flowing retro script; every letter joined to the next so the whole design is ONE single connected solid black piece.`,
-    `A long swash flows from the letter tails underneath the entire name and ties back into the first letter.`,
-    `A small round open ring (circle with a hole) at the far left end and the far right end for attaching a chain, joined by curly flourishes.`,
-    ornamentForStyle(styleOrOrnament),
-    `Pure solid black silhouette on a plain white background, flat, no shading, no gradient, no outline, no texture, no 3D, no chain, no other text.`,
-  ]
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+export function promptInputFrom(
+  name: string,
+  ornament: string,
+  options?: Partial<PromptInput>,
+): PromptInput {
+  return {
+    name,
+    ornament,
+    basePrompt: options?.basePrompt ?? DEFAULT_BASE_PROMPT,
+    ring: options?.ring ?? DEFAULT_RING_POLICY,
+    hasReferences: options?.hasReferences ?? true,
+  };
 }

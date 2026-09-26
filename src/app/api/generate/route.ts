@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         apiCostUsd,
         apiCostTicks: BigInt(result.apiCostTicks),
         imageModel: result.imageModel,
+        usedRefs: JSON.stringify(result.usedRefs),
       },
     });
 

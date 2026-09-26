@@ -12,7 +12,7 @@ Varsayılan (canlı maliyet testi): `grok-imagine-image-2.0`, **1 referans**, `q
    Çeşit için `XAI_BATCHES` paralel istek, her biri `XAI_N_PER_BATCH` ve **farklı** stil referansı. Başarısız slot’lar için retry `n = kalan` (`XAI_MAX_RETRIES`, varsayılan 2).
 
    - `XAI_REF_COUNT=1` (varsayılan) veya `2` → `POST /images/edits` JSON. `quality` **low** pinlenir (edits’in medium’u görsel başı +$0.02).
-   - `XAI_REF_COUNT=0` → text-only `/images/generations` (daha kötü; yalnızca seçenek). Stil metni [`prompts/style-description.md`](prompts/style-description.md). SVG markup prompt’ta işe yaramaz.
+   - `XAI_REF_COUNT=0` → text-only `/images/generations` (daha kötü; yalnızca seçenek). Ortak temel metin admin Ayarlar’daki **Ortak temel prompt** alanıdır (kod veya `.md` dosyası değil). SVG markup prompt’ta işe yaramaz.
 
    ```json
    {
@@ -27,9 +27,9 @@ Varsayılan (canlı maliyet testi): `grok-imagine-image-2.0`, **1 referans**, `q
    }
    ```
 
-   Referanslar ve stiller **admin Ayarlar**’dan yönetilir (`/admin` → Ayarlar). İlk açılışta 5 kategori (Klasik, Kalpli, Yıldızlı, Kelebekli, Zarif) ve owner referansları seed edilir. Müşteri seçici yalnızca açık kategorileri DB’den okur. Üretim, o kategorinin prompt’unu ve referanslarını kullanır (aynı yazılı isim hariç). Kategoride ref yoksa text-only. Üretim knob’ları (model, quality, ref count, batch, n, resolution, retry) admin’den canlı değiştirilir; env varsayılandır.
+   Referanslar ve stiller **admin Ayarlar**’dan yönetilir (`/admin` → Ayarlar). İlk açılışta 5 kategori (Klasik, Kalpli, Yıldızlı, Kelebekli, Zarif) ve owner referansları seed edilir; bu 5’inin halka ayarı **iki uç halkası**. Yeni kategori halka sayısını (yok / bir / iki), tek halkada konumu (sol uç / sağ uç / ilk harf) ve halka kontrolünün zorlanıp zorlanmayacağını admin’den seçer. Müşteri seçici yalnızca açık kategorileri DB’den okur. Üretim, o kategorinin prompt’unu, halka cümlesini ve **yalnızca o kategoriye atanmış + açık** referanslarını kullanır (aynı yazılı isim hariç). Kategoride ref yoksa text-only. Ortak temel prompt ve üretim knob’ları admin’den canlı değiştirilir; env knob varsayılandır.
 
-   Doğrulama: S/B; ü noktaları / Ş cedilla yakınsa kısa gövdeyle kaynaştırılır; **sonra** tek-parça kontrolü; uç halkaları; vision yazım. Geçmezse o slot retry. Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
+   Doğrulama: S/B; ü noktaları / Ş cedilla yakınsa kısa gövdeyle kaynaştırılır; **sonra** tek-parça kontrolü; halka kontrolü (kategori ayarına göre, kapatılabilir); vision yazım. Geçmezse o slot retry. Geçen B/W [potrace](https://potrace.sourceforge.net/) ile SVG.
 
 2. **Deterministik font yedeği (son çare)**  
    Tüm retry’ler bitince kalan slot’lar font yoluyla doldurulur ve **Yedek (font)** işaretlenir.
@@ -40,7 +40,7 @@ Her teslim edilen tasarım:
 
 - yalnızca `#000` / `#fff`
 - tek bağlı siyah parça (iç boşluklar / harf gözleri / halka delikleri serbest)
-- solda ve sağda zincir halkası
+- zincir halkası: kategori ayarına göre (yok / bir / iki)
 - gömülü raster **olmayan** vektör SVG
 
 ## Stil listesi
@@ -87,10 +87,12 @@ Ana ekranlar:
 | ![](docs/samples/ui_home.png) | ![](docs/samples/ui_results.png) |
 | **Admin kod** | **Kod yükleme** |
 | ![](docs/samples/ui_admin.png) | ![](docs/samples/ui_redeem.png) |
-| **Admin Ayarlar (üretim)** | **Kategoriler** |
+| **Admin Ayarlar (üretim + temel prompt)** | **Kategoriler (halka + son prompt)** |
 | ![](docs/samples/ui_admin_settings.png) | ![](docs/samples/ui_admin_categories.png) |
 | **Referanslar** | **Müşteri stil seçici (DB)** |
 | ![](docs/samples/ui_admin_references.png) | ![](docs/samples/ui_home_styles.png) |
+| **Üretim listesi (kategori + gönderilen ref)** | |
+| ![](docs/samples/ui_admin_generations.png) | |
 
 Aynı seti yeniden üretmek için: `npx tsx scripts/write-docs-samples.ts`
 

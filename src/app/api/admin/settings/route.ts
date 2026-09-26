@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isAdminSession } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
 import { envSettings, resolveGenerationSettings, saveGenerationSettings } from "@/lib/catalog/settings";
+import { TECHNICAL_RULES } from "@/lib/generate/prompt";
 
 const patchSchema = z.object({
   imageModel: z.string().min(1).max(80).nullable().optional(),
@@ -11,6 +12,7 @@ const patchSchema = z.object({
   nPerBatch: z.number().int().min(1).max(8).nullable().optional(),
   resolution: z.enum(["1k", "2k"]).nullable().optional(),
   maxRetries: z.number().int().min(0).max(8).nullable().optional(),
+  basePrompt: z.string().min(1).max(8000).nullable().optional(),
 });
 
 export async function GET() {
@@ -18,6 +20,7 @@ export async function GET() {
   return json({
     settings: await resolveGenerationSettings(),
     envDefaults: envSettings(),
+    technicalRules: TECHNICAL_RULES,
   });
 }
 

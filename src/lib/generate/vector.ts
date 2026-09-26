@@ -1,6 +1,12 @@
 import type { StyleId } from "../constants";
 import { pickFontsForName, measureText, textToPathData, type LoadedFont } from "./fonts";
 import { butterflyPath, heartPath, ringPath, starPath, stemPath } from "./ornaments";
+import {
+  DEFAULT_RING_POLICY,
+  wantsLeftRing,
+  wantsRightRing,
+  type RingPolicy,
+} from "./ring-policy";
 
 export type Variation = {
   index: number;
@@ -72,7 +78,12 @@ function fontById(fonts: LoadedFont[], id: string): LoadedFont {
   return fonts.find((f) => f.id === id) ?? fonts[0]!;
 }
 
-export function composeNameSvg(name: string, style: StyleId, variation: Variation): Composition {
+export function composeNameSvg(
+  name: string,
+  style: StyleId,
+  variation: Variation,
+  ringPolicy: RingPolicy = DEFAULT_RING_POLICY,
+): Composition {
   const fonts = pickFontsForName(name);
   const loaded = fontById(fonts, variation.fontId);
   const font = loaded.font;
@@ -87,19 +98,21 @@ export function composeNameSvg(name: string, style: StyleId, variation: Variatio
   const padX = 56;
   const padY = variation.butterfly ? 110 : 64;
   const textWidth = metrics.width;
+  const drawLeft = wantsLeftRing(ringPolicy);
+  const drawRight = wantsRightRing(ringPolicy);
 
-  const textX = padX + ringOuter * 2 + gap;
+  const textX = padX + (drawLeft ? ringOuter * 2 + gap : 0);
   const baseline = padY + metrics.ascender * 0.95;
   const textY = baseline;
 
   const swashY = baseline + Math.max(10, fontSize * 0.1);
   const leftRing = { x: padX + ringOuter, y: swashY };
   const rightRing = {
-    x: textX + textWidth + gap + ringOuter,
+    x: textX + textWidth + (drawRight ? gap + ringOuter : 0),
     y: swashY - variation.swashAmp * 0.15,
   };
 
-  const width = Math.ceil(rightRing.x + ringOuter + padX);
+  const width = Math.ceil((drawRight ? rightRing.x + ringOuter : textX + textWidth) + padX);
   const ornamentBottom = variation.danglingHeart || variation.star ? 130 : 50;
   const height = Math.ceil(swashY + variation.swashAmp + ornamentBottom + 48);
 
@@ -108,14 +121,14 @@ export function composeNameSvg(name: string, style: StyleId, variation: Variatio
   const c1y = swashY + variation.swashAmp;
   const c2y = swashY - variation.swashAmp * 0.25;
 
-  const swashStartX = leftRing.x + ringOuter * 0.92;
-  const swashEndX = rightRing.x - ringOuter * 0.92;
+  const swashStartX = drawLeft ? leftRing.x + ringOuter * 0.92 : textX;
+  const swashEndX = drawRight ? rightRing.x - ringOuter * 0.92 : textX + textWidth;
   const swash = `M ${swashStartX} ${leftRing.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${swashEndX} ${rightRing.y}`;
 
   const textPath = textToPathData(font, name, textX, textY, fontSize, variation.tracking);
   const extras: string[] = [];
-  extras.push(ringPath(leftRing.x, leftRing.y, ringOuter, ringInner));
-  extras.push(ringPath(rightRing.x, rightRing.y, ringOuter, ringInner));
+  if (drawLeft) extras.push(ringPath(leftRing.x, leftRing.y, ringOuter, ringInner));
+  if (drawRight) extras.push(ringPath(rightRing.x, rightRing.y, ringOuter, ringInner));
 
   if (variation.leftHeart) {
     const hx = leftRing.x + ringOuter + 46;
@@ -157,13 +170,14 @@ export function composeNameSvg(name: string, style: StyleId, variation: Variatio
   </g>
 </svg>`;
 
+  const rings: RingSpec[] = [];
+  if (drawLeft) rings.push({ x: leftRing.x, y: leftRing.y, outer: ringOuter, inner: ringInner });
+  if (drawRight) rings.push({ x: rightRing.x, y: rightRing.y, outer: ringOuter, inner: ringInner });
+
   return {
     svg,
     width,
     height,
-    rings: [
-      { x: leftRing.x, y: leftRing.y, outer: ringOuter, inner: ringInner },
-      { x: rightRing.x, y: rightRing.y, outer: ringOuter, inner: ringInner },
-    ],
+    rings,
   };
 }

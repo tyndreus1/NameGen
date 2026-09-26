@@ -6,6 +6,7 @@ import { ensureCatalog } from "./seed";
 export type CatalogRef = {
   id: string;
   writtenName: string | null;
+  filename: string;
   dataUrl: string;
 };
 
@@ -38,7 +39,7 @@ export async function loadCategoryRefs(
     if (written && written === needle) continue;
     const dataUrl = referenceDataUrl(ref.id);
     if (!dataUrl) continue;
-    picked.push({ id: ref.id, writtenName: ref.writtenName, dataUrl });
+    picked.push({ id: ref.id, writtenName: ref.writtenName, filename: ref.filename, dataUrl });
     if (picked.length >= count) break;
   }
   return picked;

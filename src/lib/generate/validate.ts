@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { countBlackPixels, cropToContent, hasGrayPixels, repairSmallIslandsAsync } from "./connectivity";
-import { hasEndRings } from "./rings";
+import { checkRings } from "./rings";
+import { DEFAULT_RING_POLICY, type RingPolicy } from "./ring-policy";
 import { binaryToPng, cleanTracedSvg, pngToBinary } from "./postprocess";
 import { traceToSvgOffThread, yieldEventLoop } from "./offload";
 import type { XaiClient } from "./xai-client";
@@ -37,6 +38,7 @@ export async function validateGrokRaster(
   pngInput: Buffer,
   expectedName: string,
   client: XaiClient,
+  ringPolicy: RingPolicy = DEFAULT_RING_POLICY,
 ): Promise<ValidationResult> {
   let visionCost = 0;
   let visionCostTicks = 0;
@@ -51,9 +53,9 @@ export async function validateGrokRaster(
     return { ok: false, reason: `not one piece (components=${repair.components})`, visionCost, visionCostTicks };
   }
 
-  const rings = hasEndRings(binary);
+  const rings = checkRings(binary, ringPolicy);
   if (!rings.ok) {
-    return { ok: false, reason: "missing left/right end rings with holes", visionCost, visionCostTicks };
+    return { ok: false, reason: rings.reason ?? "ring check failed", visionCost, visionCostTicks };
   }
 
   const cropped = cropToContent(binary, 40);

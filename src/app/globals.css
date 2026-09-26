@@ -231,6 +231,45 @@ textarea {
   background: #fff;
 }
 
+.prompt-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  background: #f7f2ea;
+}
+.tech-rules ul {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.used-refs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.used-ref {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 76px;
+}
+.used-ref img {
+  width: 76px;
+  height: 36px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.used-ref small {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  word-break: break-word;
+}
+
 @media (max-width: 800px) {
   .settings-grid, .ref-grid { grid-template-columns: 1fr; }
 }

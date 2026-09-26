@@ -13,17 +13,26 @@ type CodeRow = {
   redeemedBy: string | null;
 };
 
+type UsedRefRow = {
+  id: string;
+  writtenName: string | null;
+  filename: string;
+  url: string;
+};
+
 type GenerationRow = {
   id: string;
   email: string;
   name: string;
   style: string;
+  categoryLabel: string;
   grokAccepted: number;
   fallbackCount: number;
   attempts: number;
   apiCostUsd: number;
   apiCostTicks: string;
   imageModel: string | null;
+  usedRefs: UsedRefRow[];
   createdAt: string;
 };
 
@@ -202,7 +211,8 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
                 <th>Zaman</th>
                 <th>Kullanıcı</th>
                 <th>İsim</th>
-                <th>Stil</th>
+                <th>Kategori</th>
+                <th>Gönderilen ref</th>
                 <th>Grok / yedek</th>
                 <th>Deneme</th>
                 <th>Model</th>
@@ -216,7 +226,24 @@ export function AdminApp({ unlocked }: { unlocked: boolean }) {
                   <td>{new Date(row.createdAt).toLocaleString("tr-TR")}</td>
                   <td>{row.email}</td>
                   <td>{row.name}</td>
-                  <td>{row.style}</td>
+                  <td>
+                    <strong>{row.categoryLabel ?? row.style}</strong>
+                    <p className="hint">{row.style}</p>
+                  </td>
+                  <td>
+                    {row.usedRefs?.length ? (
+                      <div className="used-refs">
+                        {row.usedRefs.map((ref) => (
+                          <span className="used-ref" key={ref.id}>
+                            <img alt={ref.writtenName || ref.filename} src={ref.url} />
+                            <small>{ref.writtenName || ref.filename}</small>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="hint">—</span>
+                    )}
+                  </td>
                   <td>
                     {row.grokAccepted}/{row.fallbackCount}
                   </td>

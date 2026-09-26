@@ -1,4 +1,5 @@
 import type { BinaryImage } from "./connectivity";
+import type { RingPolicy } from "./ring-policy";
 
 export type Hole = {
   area: number;
@@ -151,11 +152,12 @@ export type RingCheck = {
   ok: boolean;
   left: Hole | null;
   right: Hole | null;
+  reason?: string;
 };
 
-export function hasEndRings(image: BinaryImage): RingCheck {
+export function locateEndRings(image: BinaryImage): RingCheck {
   const bounds = blackBounds(image);
-  if (!bounds) return { ok: false, left: null, right: null };
+  if (!bounds) return { ok: false, left: null, right: null, reason: "empty silhouette" };
   const span = Math.max(1, bounds.maxX - bounds.minX);
   const band = Math.max(8, span * 0.18);
   const holes = findInteriorHoles(image).filter((hole) =>
@@ -173,4 +175,41 @@ export function hasEndRings(image: BinaryImage): RingCheck {
     }
   }
   return { ok: Boolean(left && right && left !== right), left, right };
+}
+
+/** Legacy two-end-ring check. Prefer checkRings(policy) for category-aware validation. */
+export function hasEndRings(image: BinaryImage): RingCheck {
+  const found = locateEndRings(image);
+  return {
+    ...found,
+    ok: Boolean(found.left && found.right && found.left !== found.right),
+    reason: found.left && found.right && found.left !== found.right ? undefined : "missing left/right end rings with holes",
+  };
+}
+
+export function checkRings(image: BinaryImage, policy: RingPolicy): RingCheck {
+  if (!policy.enforceRings || policy.ringCount === "none") {
+    return { ok: true, left: null, right: null };
+  }
+  const found = locateEndRings(image);
+  if (policy.ringCount === "two") {
+    const ok = Boolean(found.left && found.right && found.left !== found.right);
+    return {
+      ...found,
+      ok,
+      reason: ok ? undefined : "missing left/right end rings with holes",
+    };
+  }
+  if (policy.ringPosition === "right") {
+    return {
+      ...found,
+      ok: Boolean(found.right),
+      reason: found.right ? undefined : "missing right end ring with hole",
+    };
+  }
+  return {
+    ...found,
+    ok: Boolean(found.left),
+    reason: found.left ? undefined : "missing left/first-letter ring with hole",
+  };
 }

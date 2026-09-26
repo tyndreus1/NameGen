@@ -39,6 +39,20 @@ export async function fakePendantPng(): Promise<Buffer> {
   return binaryToPng(pendantBinary());
 }
 
+/** One-piece bar with a single compact open ring on the left. */
+export function leftRingPendantBinary(width = 400, height = 120): BinaryImage {
+  const image = blank(width, height);
+  const midY = Math.round(height / 2);
+  fillRect(image, 46, midY - 8, width - 92, 16);
+  ring(image, 28, midY, 20, 9);
+  fillRect(image, 40, midY - 4, 16, 8);
+  return image;
+}
+
+export async function fakeLeftRingPendantPng(): Promise<Buffer> {
+  return binaryToPng(leftRingPendantBinary());
+}
+
 /** Realistic 1k/2k-class Grok frame: large silhouette plus scattered specks. */
 export async function largePendantPng(width = 1600, height = 640, specks = 220): Promise<Buffer> {
   const image = pendantBinary(width, height);
