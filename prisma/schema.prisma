@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  credits      Int           @default(60)
+  createdAt    DateTime      @default(now())
+  redemptions  CreditCode[]
+  generations  Generation[]
+  creditSpends CreditSpend[]
+}
+
+model CreditCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  credits      Int
+  createdAt    DateTime  @default(now())
+  redeemedAt   DateTime?
+  redeemedById String?
+  redeemedBy   User?     @relation(fields: [redeemedById], references: [id])
+}
+
+/// Local ledger for IdeaLaserStudio-shaped spend/refund.
+/// Unique `idempotencyKey` makes `spend` replay-safe (same key = same spendId, no double charge).
+model CreditSpend {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature        String
+  amount         Int
+  idempotencyKey String    @unique
+  refundedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Generation {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  name          String
+  style         String
+  count         Int
+  grokAccepted  Int      @default(0)
+  fallbackCount Int      @default(0)
+  attempts      Int      @default(0)
+  apiCostUsd    Float    @default(0)
+  apiCostTicks  BigInt   @default(0)
+  imageModel    String?
+  usedRefs      String   @default("[]")
+  createdAt     DateTime @default(now())
+}
+
+model Category {
+  id           String               @id @default(cuid())
+  slug         String               @unique
+  label        String
+  description  String               @default("")
+  promptText   String
+  ringCount    String               @default("two")
+  ringPosition String               @default("left")
+  enforceRings Boolean              @default(true)
+  enabled      Boolean              @default(true)
+  sortOrder    Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  references   CategoryReference[]
+}
+
+model StyleReference {
+  id          String               @id @default(cuid())
+  filename    String
+  writtenName String?
+  enabled     Boolean              @default(true)
+  onePiece    Boolean              @default(true)
+  warning     String?
+  createdAt   DateTime             @default(now())
+  categories  CategoryReference[]
+}
+
+model CategoryReference {
+  categoryId  String
+  referenceId String
+  category    Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  reference   StyleReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, referenceId])
+}
+
+model AppSettings {
+  id         String   @id
+  imageModel String?
+  quality    String?
+  refCount   Int?
+  batches    Int?
+  nPerBatch  Int?
+  resolution String?
+  maxRetries      Int?
+  basePrompt      String?
+  startingCredits Int?
+  generationCost  Int?
+  updatedAt       DateTime @updatedAt
+}

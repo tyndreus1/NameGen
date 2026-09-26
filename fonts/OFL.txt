@@ -1,0 +1,17 @@
+This folder contains fonts licensed under the SIL Open Font License, Version 1.1.
+
+Fonts (from Google Fonts):
+- Great Vibes
+- Allura
+- Alex Brush
+- Sacramento
+- Parisienne
+- Tangerine
+- Italianno
+- Dancing Script
+
+Copyright of each font belongs to its respective authors.
+The OFL allows use, study, modification and redistribution provided
+the fonts are not sold by themselves and this license is included.
+
+https://openfontlicense.org/open-font-license-official-text/

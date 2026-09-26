@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          CODE_SECRET: ci-code-secret
+          SESSION_SECRET: ci-session-secret
+          ADMIN_PASSWORD: ci-admin-password
+          DATABASE_URL: file:./test.db
