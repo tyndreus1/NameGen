@@ -34,7 +34,7 @@ Varsayılan (canlı maliyet testi): `grok-imagine-image-2.0`, **1 referans**, `q
 2. **Deterministik font yedeği (son çare)**  
    Tüm retry’ler bitince kalan slot’lar font yoluyla doldurulur ve **Yedek (font)** işaretlenir.
 
-`/admin` her üretimin USD maliyetini ve `cost_in_usd_ticks` (1e10 ticks = $1) değerini listeler. Kredi aynı: **4 tasarım = 3 kredi**; hiç çıktı yoksa iade.
+`/admin` her üretimin USD maliyetini ve `cost_in_usd_ticks` (1e10 ticks = $1) değerini listeler. Kredi miktarları admin Ayarlar’dadır (varsayılan: yeni hesap **60**, üretim **3**; 0 başlangıç = yalnızca kod). Üretim tamamen başarısızsa iade.
 
 Her teslim edilen tasarım:
 
@@ -91,20 +91,37 @@ Ana ekranlar:
 | ![](docs/samples/ui_admin_settings.png) | ![](docs/samples/ui_admin_categories.png) |
 | **Referanslar** | **Müşteri stil seçici (DB)** |
 | ![](docs/samples/ui_admin_references.png) | ![](docs/samples/ui_home_styles.png) |
-| **Üretim listesi (kategori + gönderilen ref)** | |
-| ![](docs/samples/ui_admin_generations.png) | |
+| **Üretim listesi (kategori + gönderilen ref)** | **Ana sayfa (sonuçlar sağ kart)** |
+| ![](docs/samples/ui_admin_generations.png) | ![](docs/samples/ui_home_results.png) |
+| **Kredi kodu penceresi** | **Başlangıç kredisi ayarı** |
+| ![](docs/samples/ui_home_credit_modal.png) | ![](docs/samples/ui_admin_credits.png) |
 
 Aynı seti yeniden üretmek için: `npx tsx scripts/write-docs-samples.ts`
 
 ## Kredi sistemi
 
-- Yeni hesap: **60** kredi
-- Her üretim: **3** kredi (sunucuda atomik düşüm; üretim tamamen başarısızsa iade)
-- Bakiye &lt; 3 ise üretim reddedilir
-- Top-up: **Kod gir**. Kodlar yalnızca **60 / 120 / 240** kredi taşır
+- Yeni hesap ve üretim maliyeti **admin Ayarlar**’dan düzenlenir (`startingCredits`, `generationCost`). Varsayılan 60 / 3. Başlangıcı 0 yapmak, kredi çiftliğini keser: kredi yalnızca koddan gelir.
+- Düşüm sunucuda atomiktir; üretim tamamen başarısızsa iade
+- Bakiye üretim maliyetinin altındaysa üretim reddedilir
+- Top-up: müşteri üstteki **kredi rozetine** tıklayınca açılan pencereden kod girer. Kodlar yalnızca **60 / 120 / 240** kredi taşır
 - Kodlar HMAC-SHA256 ile `CODE_SECRET` kullanılarak imzalanır (`NG60-XXXX-XXXX-XXXX-XXXXXXXX`)
 - Bir kod sistem genelinde **bir kez** kullanılabilir (unique + transaction)
 - Admin UI (`/admin`) ve CLI kod üretir; admin üretilen/kullanılan kodları listeler
+
+### Kredi arayüzü (`src/lib/credits.ts`)
+
+NameGen ileride IdeaLaserStudio içinde bir özellik olacak; kredi birkaç özelliğin (isim üretimi, 3D, …) paylaştığı havuzdan gelecek. Bu yüzden okuma / harcama / iade / kod yükleme tek bir cüzdan arayüzünün arkasındadır. Bugün `localCreditWallet` yerel `User.credits` sütununu kullanır. Paylaşılan havuza geçince yalnızca `creditWallet` export’unu değiştirin — route’lar ve UI `getBalance` / `spend` / `refund` / `redeem` çağırır.
+
+```ts
+export type CreditWallet = {
+  getBalance(userId: string): Promise<number>;
+  spend(userId: string, amount: number): Promise<number>;
+  refund(userId: string, amount: number): Promise<number>;
+  redeem(userId: string, rawCode: string): Promise<{ credits: number; added: number; code: string }>;
+};
+```
+
+`startingGrant()` ve `generationCharge()` admin ayarından okur. `reserveGenerationCredits` / `refundGenerationCredits` bu tutarla `spend` / `refund` çağıran ince sarmalayıcılardır.
 
 ## Kurulum
 

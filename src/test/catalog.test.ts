@@ -245,5 +245,11 @@ describe("admin catalog", () => {
     expect(saved.refCount).toBe(2);
     expect(saved.nPerBatch).toBe(4);
     expect(saved.resolution).toBe("2k");
+    expect(saved.startingCredits).toBe(60);
+    expect(saved.generationCost).toBe(3);
+
+    const credits = await saveGenerationSettings({ startingCredits: 0, generationCost: 5 });
+    expect(credits.startingCredits).toBe(0);
+    expect(credits.generationCost).toBe(5);
   });
 });

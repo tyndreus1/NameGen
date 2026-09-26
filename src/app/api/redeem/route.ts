@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
-import { CreditError, redeemCode } from "@/lib/credits";
+import { CreditError, redeem } from "@/lib/credits";
 
 const schema = z.object({
   code: z.string().min(8).max(48),
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await redeemCode(user.id, parsed.data.code);
+    const result = await redeem(user.id, parsed.data.code);
     return json(result);
   } catch (error) {
     if (error instanceof CreditError) {

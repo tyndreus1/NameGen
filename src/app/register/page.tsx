@@ -1,12 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [startingCredits, setStartingCredits] = useState(60);
+  const [generationCost, setGenerationCost] = useState(3);
+
+  useEffect(() => {
+    void fetch("/api/catalog")
+      .then((response) => response.json())
+      .then((data) => {
+        if (typeof data.credits?.startingCredits === "number") {
+          setStartingCredits(data.credits.startingCredits);
+        }
+        if (typeof data.credits?.generationCost === "number") {
+          setGenerationCost(data.credits.generationCost);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,7 +52,12 @@ export default function RegisterPage() {
       </header>
       <form className="panel auth-wrap" onSubmit={onSubmit}>
         <h2>Kayıt ol</h2>
-        <p className="hint">Yeni hesap 60 kredi ile başlar. Her üretim 3 kredi.</p>
+        <p className="hint">
+          {startingCredits > 0
+            ? `Yeni hesap ${startingCredits} kredi ile başlar.`
+            : "Yeni hesap kredi almaz; kod ile yükleme gerekir."}{" "}
+          Her üretim {generationCost} kredi.
+        </p>
         <label htmlFor="email">E-posta</label>
         <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <label htmlFor="password">Şifre (en az 8 karakter)</label>

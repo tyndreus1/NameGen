@@ -38,6 +38,8 @@ type Settings = {
   resolution: string;
   maxRetries: number;
   basePrompt: string;
+  startingCredits: number;
+  generationCost: number;
 };
 
 export function AdminSettings() {
@@ -76,7 +78,11 @@ export function AdminSettings() {
         })),
       );
       setReferences(ref.references ?? []);
-      setSettings(set.settings);
+      setSettings({
+        ...set.settings,
+        startingCredits: set.settings.startingCredits ?? 60,
+        generationCost: set.settings.generationCost ?? 3,
+      });
       setEnvDefaults(set.envDefaults ?? null);
       setTechnicalRules(set.technicalRules ?? []);
     } catch (err) {
@@ -282,6 +288,32 @@ export function AdminSettings() {
               value={settings.maxRetries}
               onChange={(e) => setSettings({ ...settings, maxRetries: Number(e.target.value) })}
             />
+          </div>
+        </div>
+        <div className="settings-grid">
+          <div>
+            <label htmlFor="startingCredits">Yeni hesap başlangıç kredisi</label>
+            <input
+              id="startingCredits"
+              type="number"
+              min={0}
+              max={10000}
+              value={settings.startingCredits}
+              onChange={(e) => setSettings({ ...settings, startingCredits: Number(e.target.value) })}
+            />
+            <p className="hint">Kayıt olunca verilen miktar. 0 = yalnızca kod ile kredi.</p>
+          </div>
+          <div>
+            <label htmlFor="generationCost">Üretim maliyeti (kredi)</label>
+            <input
+              id="generationCost"
+              type="number"
+              min={1}
+              max={100}
+              value={settings.generationCost}
+              onChange={(e) => setSettings({ ...settings, generationCost: Number(e.target.value) })}
+            />
+            <p className="hint">Her isim üretiminde düşülür. Varsayılan 3.</p>
           </div>
         </div>
         <label htmlFor="basePrompt">Ortak temel prompt (her kategoriye eklenir)</label>

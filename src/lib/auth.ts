@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "./db";
 import { getSessionSecret } from "./env";
-import { STARTING_CREDITS } from "./constants";
+import { startingGrant } from "./credits";
 import { hashPassword, verifyPassword, normalizeEmail } from "./password";
 
 export { hashPassword, verifyPassword, normalizeEmail };
@@ -20,7 +20,7 @@ export async function createUser(email: string, password: string) {
     data: {
       email: normalized,
       passwordHash: await hashPassword(password),
-      credits: STARTING_CREDITS,
+      credits: await startingGrant(),
     },
   });
 }

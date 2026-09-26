@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
-import { GENERATION_COST, VARIATION_COUNT } from "@/lib/constants";
-import { CreditError, refundGenerationCredits, reserveGenerationCredits } from "@/lib/credits";
+import { VARIATION_COUNT } from "@/lib/constants";
+import { CreditError, generationCharge, refundGenerationCredits, reserveGenerationCredits } from "@/lib/credits";
 import { prisma } from "@/lib/db";
 import { generateDesigns } from "@/lib/generate/pipeline";
 import { ensureCatalog } from "@/lib/catalog/seed";
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     });
     if (!category) return apiError("Geçersiz veya kapalı stil");
 
+    const cost = await generationCharge();
     const creditsAfterReserve = await reserveGenerationCredits(user.id);
     reserved = true;
 
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
 
     return json({
       credits: creditsAfterReserve,
-      cost: GENERATION_COST,
+      cost,
       usedGrok: result.usedGrok,
       grokAttempted: result.grokAttempted,
       grokAccepted: result.grokAccepted,

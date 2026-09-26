@@ -87,7 +87,9 @@ model AppSettings {
   batches    Int?
   nPerBatch  Int?
   resolution String?
-  maxRetries Int?
-  basePrompt String?
-  updatedAt  DateTime @updatedAt
+  maxRetries      Int?
+  basePrompt      String?
+  startingCredits Int?
+  generationCost  Int?
+  updatedAt       DateTime @updatedAt
 }

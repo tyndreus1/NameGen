@@ -13,6 +13,8 @@ const patchSchema = z.object({
   resolution: z.enum(["1k", "2k"]).nullable().optional(),
   maxRetries: z.number().int().min(0).max(8).nullable().optional(),
   basePrompt: z.string().min(1).max(8000).nullable().optional(),
+  startingCredits: z.number().int().min(0).max(10000).nullable().optional(),
+  generationCost: z.number().int().min(1).max(100).nullable().optional(),
 });
 
 export async function GET() {

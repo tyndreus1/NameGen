@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { CreditError, redeemCode, refundGenerationCredits, reserveGenerationCredits } from "@/lib/credits";
+import { createUser } from "@/lib/auth";
+import {
+  CreditError,
+  creditWallet,
+  getBalance,
+  redeem,
+  refundGenerationCredits,
+  reserveGenerationCredits,
+  spend,
+} from "@/lib/credits";
+import { saveGenerationSettings } from "@/lib/catalog/settings";
 import { signCode } from "@/lib/codes";
 import { GENERATION_COST, STARTING_CREDITS } from "@/lib/constants";
 
@@ -20,6 +30,7 @@ describe("credit deduction and redemption", () => {
     await prisma.generation.deleteMany();
     await prisma.creditCode.deleteMany();
     await prisma.user.deleteMany();
+    await prisma.appSettings.deleteMany();
   });
 
   it("starts new users at 60 and deducts 3 atomically", async () => {
@@ -52,11 +63,11 @@ describe("credit deduction and redemption", () => {
     const code = signCode(process.env.CODE_SECRET!, 120);
     await prisma.creditCode.create({ data: { code, credits: 120 } });
 
-    const first = await redeemCode(user.id, code);
+    const first = await redeem(user.id, code);
     expect(first.added).toBe(120);
     expect(first.credits).toBe(180);
 
-    await expect(redeemCode(user.id, code)).rejects.toMatchObject({
+    await expect(redeem(user.id, code)).rejects.toMatchObject({
       code: "ALREADY_REDEEMED",
     });
 
@@ -70,10 +81,29 @@ describe("credit deduction and redemption", () => {
   it("does not accept a forged or unknown code", async () => {
     const user = await makeUser("forge@example.com");
     const forged = signCode("wrong-secret", 240);
-    await expect(redeemCode(user.id, forged)).rejects.toMatchObject({ code: "INVALID_CODE" });
+    await expect(redeem(user.id, forged)).rejects.toMatchObject({ code: "INVALID_CODE" });
 
     const real = signCode(process.env.CODE_SECRET!, 60);
-    await expect(redeemCode(user.id, real)).rejects.toMatchObject({ code: "UNKNOWN_CODE" });
+    await expect(redeem(user.id, real)).rejects.toMatchObject({ code: "UNKNOWN_CODE" });
     expect(GENERATION_COST).toBe(3);
+    expect(STARTING_CREDITS).toBe(60);
+  });
+
+  it("exposes getBalance / spend / refund / redeem on the wallet", async () => {
+    const user = await makeUser("wallet@example.com", 10);
+    expect(Object.keys(creditWallet).sort()).toEqual(["getBalance", "redeem", "refund", "spend"]);
+    expect(await getBalance(user.id)).toBe(10);
+    expect(await spend(user.id, 4)).toBe(6);
+    expect(await creditWallet.refund(user.id, 4)).toBe(10);
+  });
+
+  it("uses the admin starting-credit setting when creating a user", async () => {
+    await saveGenerationSettings({ startingCredits: 0, generationCost: 5 });
+    const user = await createUser("zero@example.com", "password12");
+    expect(user.credits).toBe(0);
+
+    const rich = await makeUser("rich@example.com", 10);
+    await expect(reserveGenerationCredits(rich.id)).resolves.toBe(5);
+    await expect(refundGenerationCredits(rich.id)).resolves.toBe(10);
   });
 });

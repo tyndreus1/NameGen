@@ -10,6 +10,12 @@ import {
   type XaiQuality,
 } from "../env";
 import { DEFAULT_BASE_PROMPT } from "../generate/prompt";
+import { GENERATION_COST, STARTING_CREDITS } from "../constants";
+
+export type CreditPolicy = {
+  startingCredits: number;
+  generationCost: number;
+};
 
 export type ResolvedSettings = {
   imageModel: string;
@@ -20,6 +26,8 @@ export type ResolvedSettings = {
   resolution: "1k" | "2k";
   maxRetries: number;
   basePrompt: string;
+  startingCredits: number;
+  generationCost: number;
   source: "env" | "mixed";
 };
 
@@ -33,6 +41,8 @@ export function envSettings(): ResolvedSettings {
     resolution: getXaiResolution(),
     maxRetries: getXaiMaxRetries(),
     basePrompt: DEFAULT_BASE_PROMPT,
+    startingCredits: STARTING_CREDITS,
+    generationCost: GENERATION_COST,
     source: "env",
   };
 }
@@ -65,7 +75,27 @@ export async function resolveGenerationSettings(): Promise<ResolvedSettings> {
     resolution: asResolution(row.resolution) ?? defaults.resolution,
     maxRetries: row.maxRetries ?? defaults.maxRetries,
     basePrompt: row.basePrompt?.trim() || defaults.basePrompt,
+    startingCredits: asNonNegInt(row.startingCredits) ?? defaults.startingCredits,
+    generationCost: asPosInt(row.generationCost) ?? defaults.generationCost,
     source: "mixed",
+  };
+}
+
+function asNonNegInt(n: number | null | undefined): number | undefined {
+  if (typeof n === "number" && Number.isInteger(n) && n >= 0) return n;
+  return undefined;
+}
+
+function asPosInt(n: number | null | undefined): number | undefined {
+  if (typeof n === "number" && Number.isInteger(n) && n >= 1) return n;
+  return undefined;
+}
+
+export async function resolveCreditPolicy(): Promise<CreditPolicy> {
+  const settings = await resolveGenerationSettings();
+  return {
+    startingCredits: settings.startingCredits,
+    generationCost: settings.generationCost,
   };
 }
 
@@ -78,6 +108,8 @@ export type SettingsPatch = {
   resolution?: string | null;
   maxRetries?: number | null;
   basePrompt?: string | null;
+  startingCredits?: number | null;
+  generationCost?: number | null;
 };
 
 export async function saveGenerationSettings(patch: SettingsPatch): Promise<ResolvedSettings> {
