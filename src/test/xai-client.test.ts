@@ -52,7 +52,9 @@ describe("xAI client", () => {
     expect(result.costTicks).toBe(800_000_000);
     expect(result.endpoint).toBe("edits");
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const firstCall = fetchMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const [url, init] = firstCall as unknown as [string, RequestInit];
     expect(url).toBe("https://api.x.ai/v1/images/edits");
     const headers = init.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/json");
@@ -84,13 +86,14 @@ describe("xAI client", () => {
       ],
       n: 1,
     });
-    let body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body));
-    expect((fetchMock.mock.calls[0] as [string, RequestInit])[0]).toBe("https://api.x.ai/v1/images/edits");
+    const editCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    let body = JSON.parse(String(editCall[1].body));
+    expect(editCall[0]).toBe("https://api.x.ai/v1/images/edits");
     expect(body.images).toHaveLength(2);
     expect(body.resolution).toBe("2k");
 
     await client.generateImages({ prompt: "none", references: [], n: 4 });
-    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.x.ai/v1/images/generations");
     body = JSON.parse(String(init.body));
     expect(body.n).toBe(4);

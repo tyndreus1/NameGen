@@ -161,8 +161,11 @@ Veya `/admin` sayfasından `ADMIN_PASSWORD` ile giriş yapıp kod üretin.
 ### Testler
 
 ```bash
+npm run typecheck
 npm test
 ```
+
+`typecheck` (`tsc --noEmit`) tanımsız değişken gibi hataları yakalar; CI (`.github/workflows/ci.yml`) önce onu, sonra `npm test` çalıştırır.
 
 Kapsam: kod imzalama/doğrulama, tek kullanımlık, kredi, bağlılık, Grok mock pipeline, kategori CRUD / referans yükleme / aynı-isim dışlama, örnek isim üretimi. xAI anahtarı testlerde kullanılmaz.
 

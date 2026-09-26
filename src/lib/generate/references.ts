@@ -52,7 +52,8 @@ export function pickReferenceIds(name: string, style: StyleId, count = 2): Refer
   }
   if (style === "butterfly" && !picked.includes("sophia") && !isSameNameAsReference(name, REFERENCE_CATALOG[3]!)) {
     const rest = picked.filter((id) => id !== "sophia").slice(0, count - 1);
-    return ["sophia", ...rest].slice(0, count);
+    const withSophia: ReferenceId[] = ["sophia", ...rest];
+    return withSophia.slice(0, count);
   }
   return picked;
 }

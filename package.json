@@ -12,6 +12,7 @@
     "db:generate": "prisma generate",
     "codes": "tsx scripts/generate-codes.ts",
     "preview": "tsx scripts/preview-designs.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },

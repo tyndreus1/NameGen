@@ -68,6 +68,7 @@ export function HomeApp({
   }, [redeemOpen]);
 
   // Display-only gate. The server charges via generationCharge() + spend(); never trust this.
+  const canGenerate = Boolean(user) && credits >= generationCost && name.trim().length > 0;
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
