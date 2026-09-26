@@ -1,3 +1,5 @@
+import { yieldEventLoop } from "./offload";
+
 export type BinaryImage = {
   width: number;
   height: number;
@@ -308,22 +310,49 @@ function dilateToward(
  * nearest letter (dilate, then a neat short bridge), then one-piece check.
  * Far or large leftovers are rejected so the slot can retry.
  */
-export function repairSmallIslands(
+export type RepairOptions = {
+  speckArea?: number;
+  maxDotArea?: number;
+  maxDistance?: number;
+  bridgeRadius?: number;
+  dilateRadius?: number;
+};
+
+/** Cap island work so a noisy 2k Grok raster cannot run unbounded. */
+const MAX_REPAIR_ISLANDS = 64;
+
+export function repairSmallIslands(image: BinaryImage, options: RepairOptions = {}): IslandRepair {
+  return runIslandRepair(image, options);
+}
+
+export async function repairSmallIslandsAsync(
   image: BinaryImage,
-  options: {
-    speckArea?: number;
-    maxDotArea?: number;
-    maxDistance?: number;
-    bridgeRadius?: number;
-    dilateRadius?: number;
-  } = {},
-): IslandRepair {
+  options: RepairOptions = {},
+): Promise<IslandRepair> {
+  return runIslandRepair(image, options, yieldEventLoop);
+}
+
+function runIslandRepair(
+  image: BinaryImage,
+  options: RepairOptions,
+  yieldEvery?: () => Promise<void>,
+): IslandRepair;
+function runIslandRepair(
+  image: BinaryImage,
+  options: RepairOptions,
+  yieldEvery: () => Promise<void>,
+): Promise<IslandRepair>;
+function runIslandRepair(
+  image: BinaryImage,
+  options: RepairOptions,
+  yieldEvery?: () => Promise<void>,
+): IslandRepair | Promise<IslandRepair> {
   const minDim = Math.min(image.width, image.height);
   let bridged = 0;
   let removed = 0;
   let dilated = 0;
 
-  for (let guard = 0; guard < 12; guard++) {
+  const step = (): IslandRepair | "again" => {
     const components = findComponents(image);
     if (components.length <= 1) {
       return { components: components.length, bridged, removed, dilated, rejected: false };
@@ -334,10 +363,11 @@ export function repairSmallIslands(
     const maxDistance = options.maxDistance ?? Math.max(16, Math.round(minDim * 0.07));
     const dilateRadius = options.dilateRadius ?? Math.max(2, Math.round(minDim / 180));
     const bridgeRadius = options.bridgeRadius ?? Math.max(1, Math.round(minDim / 280));
+    const extras = components.slice(1, MAX_REPAIR_ISLANDS + 1);
     const mainMask = componentMask(image, main);
     let changed = false;
 
-    for (const extra of components.slice(1)) {
+    for (const extra of extras) {
       const extraMask = componentMask(image, extra);
       if (extra.area < speckArea) {
         eraseComponent(image, extraMask);
@@ -356,20 +386,51 @@ export function repairSmallIslands(
           bridged++;
         }
         changed = true;
-        continue;
       }
     }
-    if (!changed) break;
+    if (!changed) {
+      const leftover = findComponents(image);
+      return {
+        components: leftover.length,
+        bridged,
+        removed,
+        dilated,
+        rejected: leftover.length !== 1,
+      };
+    }
+    return "again";
+  };
+
+  if (!yieldEvery) {
+    for (let guard = 0; guard < 12; guard++) {
+      const result = step();
+      if (result !== "again") return result;
+    }
+    const leftover = findComponents(image);
+    return {
+      components: leftover.length,
+      bridged,
+      removed,
+      dilated,
+      rejected: leftover.length !== 1,
+    };
   }
 
-  const leftover = findComponents(image);
-  return {
-    components: leftover.length,
-    bridged,
-    removed,
-    dilated,
-    rejected: leftover.length !== 1,
-  };
+  return (async () => {
+    for (let guard = 0; guard < 12; guard++) {
+      await yieldEvery();
+      const result = step();
+      if (result !== "again") return result;
+    }
+    const leftover = findComponents(image);
+    return {
+      components: leftover.length,
+      bridged,
+      removed,
+      dilated,
+      rejected: leftover.length !== 1,
+    };
+  })();
 }
 
 export function unifyToSinglePiece(image: BinaryImage, options: UnifyOptions = {}): number {

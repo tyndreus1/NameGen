@@ -64,6 +64,8 @@ Her üretim **4 alternatif** döner.
 
 `data/` gitignore’dadır. Seed, `assets/references/` altındaki owner PNG’lerini bu dizine kopyalar.
 
+`next dev` webpack izleyicisi `*.db*` ve `data/**` yollarını yok sayar. SQLite dosyasını veya yüklenen referansları izlenen bir kaynak klasörüne koymayın — üretim yazımı aksi halde yeniden derleme döngüsü başlatır (yüksek CPU, büyüyen bellek, sonraki istekler log’a bile düşmez).
+
 ## Örnek çıktılar
 
 Hedef kalite, owner’ın canlı Grok edits sonuçlarıdır (Latin isimler 17/17 doğru ve tek parça). Owner referansları: [`assets/references/`](assets/references/).

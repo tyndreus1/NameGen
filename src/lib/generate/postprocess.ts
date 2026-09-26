@@ -1,5 +1,4 @@
 import { Resvg } from "@resvg/resvg-js";
-import potrace from "potrace";
 import sharp from "sharp";
 import {
   binaryFromRgba,
@@ -11,7 +10,11 @@ import {
   unifyToSinglePiece,
   type BinaryImage,
 } from "./connectivity";
+import { traceToSvgOffThread, yieldEventLoop } from "./offload";
 import type { RingSpec } from "./vector";
+
+/** 1k Grok frames stay as-is; 2k is downscaled so pixel loops stay bounded. */
+export const MAX_WORKING_WIDTH = 1280;
 
 export type ProcessedDesign = {
   png: Buffer;
@@ -31,6 +34,12 @@ function rasterizeSvg(svg: string, width = 2000): Buffer {
 export async function pngToBinary(png: Buffer, threshold = 160): Promise<BinaryImage> {
   const { data, info } = await sharp(png)
     .flatten({ background: "#ffffff" })
+    .resize({
+      width: MAX_WORKING_WIDTH,
+      height: MAX_WORKING_WIDTH,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -43,7 +52,7 @@ export async function binaryToPng(image: BinaryImage): Promise<Buffer> {
     raw: { width: image.width, height: image.height, channels: 4 },
   })
     .png({
-      compressionLevel: 9,
+      compressionLevel: 6,
       adaptiveFiltering: false,
       palette: true,
       colors: 2,
@@ -52,26 +61,9 @@ export async function binaryToPng(image: BinaryImage): Promise<Buffer> {
     .toBuffer();
 }
 
-function traceToSvg(png: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const tracer = new potrace.Potrace();
-    tracer.setParameters({
-      threshold: 128,
-      color: "#000000",
-      background: "#ffffff",
-      turdSize: 12,
-      optTolerance: 0.42,
-      turnPolicy: "minority",
-      blackOnWhite: true,
-    });
-    tracer.loadImage(png, (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(cleanTracedSvg(tracer.getSVG()));
-    });
-  });
+async function traceToSvg(png: Buffer): Promise<string> {
+  const svg = await traceToSvgOffThread(png);
+  return cleanTracedSvg(svg);
 }
 
 export function cleanTracedSvg(svg: string): string {
@@ -115,6 +107,7 @@ export async function processRaster(
   }
   binary = cropToContent(binary, 36);
 
+  await yieldEventLoop();
   const png = await binaryToPng(binary);
   const check = await pngToBinary(png, 128);
   if (countComponents(check) !== 1) {

@@ -6,6 +6,7 @@ import { CreditError, refundGenerationCredits, reserveGenerationCredits } from "
 import { prisma } from "@/lib/db";
 import { generateDesigns } from "@/lib/generate/pipeline";
 import { ensureCatalog } from "@/lib/catalog/seed";
+import { ticksToUsd } from "@/lib/cost";
 
 const schema = z.object({
   name: z.string().min(1).max(18),
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     reserved = true;
 
     const result = await generateDesigns(parsed.data.name, category.slug, VARIATION_COUNT);
+    const apiCostUsd = result.apiCostUsd > 0 ? result.apiCostUsd : ticksToUsd(result.apiCostTicks);
     await prisma.generation.create({
       data: {
         userId: user.id,
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
         grokAccepted: result.grokAccepted,
         fallbackCount: result.fallbackCount,
         attempts: result.attempts,
-        apiCostUsd: result.apiCostUsd,
+        apiCostUsd,
         apiCostTicks: BigInt(result.apiCostTicks),
         imageModel: result.imageModel,
       },
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
       grokAttempted: result.grokAttempted,
       grokAccepted: result.grokAccepted,
       fallbackCount: result.fallbackCount,
-      apiCostUsd: result.apiCostUsd,
+      apiCostUsd,
       apiCostTicks: result.apiCostTicks,
       designs: result.designs.map((design) => ({
         index: design.index,

@@ -1,5 +1,6 @@
 import { VARIATION_COUNT, fontStyleForSlug, type StyleId } from "../constants";
-import { addTicks } from "../cost";
+import { addTicks, ticksToUsd } from "../cost";
+import { yieldEventLoop } from "./offload";
 import { loadCategoryRefs } from "../catalog/refs";
 import { resolveGenerationSettings, type ResolvedSettings } from "../catalog/settings";
 import { buildVariations, composeNameSvg } from "./vector";
@@ -132,10 +133,11 @@ export async function generateDesigns(
     const acceptImages = async (images: { buffer: Buffer }[], visionClient: XaiClient) => {
       for (const image of images) {
         if (accepted.length >= count) break;
+        await yieldEventLoop();
         try {
           const checked = await validateGrokRaster(image.buffer, name, visionClient);
-          apiCostUsd += checked.visionCost;
           apiCostTicks = addTicks(apiCostTicks, checked.visionCostTicks);
+          apiCostUsd += checked.visionCost > 0 ? checked.visionCost : ticksToUsd(checked.visionCostTicks);
           if (!checked.ok) continue;
           accepted.push({
             png: checked.png,
@@ -172,8 +174,8 @@ export async function generateDesigns(
     );
     for (const batch of varietyResults) {
       if (!batch) continue;
-      apiCostUsd += batch.cost;
       apiCostTicks = addTicks(apiCostTicks, batch.costTicks);
+      apiCostUsd += batch.cost > 0 ? batch.cost : ticksToUsd(batch.costTicks);
       await acceptImages(batch.images, resolved);
     }
 
@@ -181,8 +183,8 @@ export async function generateDesigns(
       const n = count - accepted.length;
       try {
         const batch = await requestBatch(n);
-        apiCostUsd += batch.cost;
         apiCostTicks = addTicks(apiCostTicks, batch.costTicks);
+        apiCostUsd += batch.cost > 0 ? batch.cost : ticksToUsd(batch.costTicks);
         await acceptImages(batch.images, resolved);
       } catch {
         /* next retry */
@@ -210,7 +212,7 @@ export async function generateDesigns(
     grokAccepted,
     fallbackCount,
     attempts,
-    apiCostUsd,
+    apiCostUsd: apiCostUsd > 0 ? apiCostUsd : ticksToUsd(apiCostTicks),
     apiCostTicks,
     imageModel: grokAttempted ? settings.imageModel : null,
     refCount: settings.refCount,

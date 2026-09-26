@@ -1,9 +1,9 @@
 import sharp from "sharp";
-import { countBlackPixels, cropToContent, hasGrayPixels, repairSmallIslands } from "./connectivity";
+import { countBlackPixels, cropToContent, hasGrayPixels, repairSmallIslandsAsync } from "./connectivity";
 import { hasEndRings } from "./rings";
 import { binaryToPng, cleanTracedSvg, pngToBinary } from "./postprocess";
+import { traceToSvgOffThread, yieldEventLoop } from "./offload";
 import type { XaiClient } from "./xai-client";
-import potrace from "potrace";
 
 export type ValidationOk = {
   ok: true;
@@ -29,26 +29,8 @@ function namesMatch(expected: string, actual: string): boolean {
   return a === b;
 }
 
-function traceToSvg(png: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const tracer = new potrace.Potrace();
-    tracer.setParameters({
-      threshold: 128,
-      color: "#000000",
-      background: "#ffffff",
-      turdSize: 12,
-      optTolerance: 0.42,
-      turnPolicy: "minority",
-      blackOnWhite: true,
-    });
-    tracer.loadImage(png, (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(cleanTracedSvg(tracer.getSVG()));
-    });
-  });
+async function traceToSvg(png: Buffer): Promise<string> {
+  return cleanTracedSvg(await traceToSvgOffThread(png));
 }
 
 export async function validateGrokRaster(
@@ -63,7 +45,8 @@ export async function validateGrokRaster(
     return { ok: false, reason: "empty after threshold", visionCost, visionCostTicks };
   }
 
-  const repair = repairSmallIslands(binary);
+  const repair = await repairSmallIslandsAsync(binary);
+  await yieldEventLoop();
   if (repair.rejected || repair.components !== 1) {
     return { ok: false, reason: `not one piece (components=${repair.components})`, visionCost, visionCostTicks };
   }

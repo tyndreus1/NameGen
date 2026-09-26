@@ -1,4 +1,4 @@
-import { usdToTicks } from "../cost";
+import { ticksToUsd, usdToTicks } from "../cost";
 import { getXaiApiKey, getXaiImageModel, getXaiQuality, getXaiResolution, getXaiTextModel } from "../env";
 
 export const XAI_BASE = "https://api.x.ai/v1";
@@ -35,29 +35,54 @@ export type XaiClient = {
   transcribeName(png: Buffer): Promise<TranscribeResult>;
 };
 
-export function extractCost(payload: unknown): number {
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function readUsdField(payload: unknown): number {
   if (!payload || typeof payload !== "object") return 0;
   const obj = payload as Record<string, unknown>;
-  if (typeof obj.cost === "number") return obj.cost;
+  const direct = asFiniteNumber(obj.cost) ?? asFiniteNumber(obj.cost_usd);
+  if (direct && direct > 0) return direct;
   const usage = obj.usage;
   if (usage && typeof usage === "object") {
     const u = usage as Record<string, unknown>;
-    if (typeof u.cost === "number") return u.cost;
-    if (typeof u.cost_usd === "number") return u.cost_usd;
+    const nested = asFiniteNumber(u.cost) ?? asFiniteNumber(u.cost_usd);
+    if (nested && nested > 0) return nested;
   }
   return 0;
 }
 
-export function extractCostTicks(payload: unknown): number {
+function readTicksField(payload: unknown): number {
   if (!payload || typeof payload !== "object") return 0;
   const obj = payload as Record<string, unknown>;
-  if (typeof obj.cost_in_usd_ticks === "number") return Math.round(obj.cost_in_usd_ticks);
+  const direct = asFiniteNumber(obj.cost_in_usd_ticks);
+  if (direct && direct > 0) return Math.round(direct);
   const usage = obj.usage;
   if (usage && typeof usage === "object") {
-    const u = usage as Record<string, unknown>;
-    if (typeof u.cost_in_usd_ticks === "number") return Math.round(u.cost_in_usd_ticks);
+    const nested = asFiniteNumber((usage as Record<string, unknown>).cost_in_usd_ticks);
+    if (nested && nested > 0) return Math.round(nested);
   }
-  return usdToTicks(extractCost(payload));
+  return 0;
+}
+
+/** xAI often sends only `cost_in_usd_ticks` (1e10 = $1) and no dollar field. */
+export function extractCost(payload: unknown): number {
+  const usd = readUsdField(payload);
+  if (usd > 0) return usd;
+  return ticksToUsd(readTicksField(payload));
+}
+
+export function extractCostTicks(payload: unknown): number {
+  const ticks = readTicksField(payload);
+  if (ticks > 0) return ticks;
+  return usdToTicks(readUsdField(payload));
 }
 
 function decodeImageItem(item: { b64_json?: string; url?: string } | undefined): Buffer | null {

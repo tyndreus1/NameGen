@@ -1,6 +1,7 @@
 import { isAdminSession } from "@/lib/auth";
 import { apiError, json } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { ticksToUsd } from "@/lib/cost";
 
 export async function GET() {
   if (!(await isAdminSession())) return apiError("Yetkisiz", 401);
@@ -9,7 +10,10 @@ export async function GET() {
     take: 100,
     include: { user: { select: { email: true } } },
   });
-  const totalCost = rows.reduce((sum, row) => sum + row.apiCostUsd, 0);
+  const totalCost = rows.reduce(
+    (sum, row) => sum + (row.apiCostUsd > 0 ? row.apiCostUsd : ticksToUsd(row.apiCostTicks)),
+    0,
+  );
   const totalTicks = rows.reduce((sum, row) => sum + Number(row.apiCostTicks), 0);
   return json({
     totalCost,
@@ -22,7 +26,7 @@ export async function GET() {
       grokAccepted: row.grokAccepted,
       fallbackCount: row.fallbackCount,
       attempts: row.attempts,
-      apiCostUsd: row.apiCostUsd,
+      apiCostUsd: row.apiCostUsd > 0 ? row.apiCostUsd : ticksToUsd(row.apiCostTicks),
       apiCostTicks: row.apiCostTicks.toString(),
       imageModel: row.imageModel,
       createdAt: row.createdAt,

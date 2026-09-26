@@ -38,3 +38,14 @@ export function pendantBinary(width = 400, height = 120): BinaryImage {
 export async function fakePendantPng(): Promise<Buffer> {
   return binaryToPng(pendantBinary());
 }
+
+/** Realistic 1k/2k-class Grok frame: large silhouette plus scattered specks. */
+export async function largePendantPng(width = 1600, height = 640, specks = 220): Promise<Buffer> {
+  const image = pendantBinary(width, height);
+  for (let i = 0; i < specks; i++) {
+    const x = 12 + ((i * 53) % (width - 24));
+    const y = 12 + ((i * 37) % (height - 24));
+    fillRect(image, x, y, 2, 2);
+  }
+  return binaryToPng(image);
+}

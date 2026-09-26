@@ -17,6 +17,8 @@ describe("xAI client", () => {
     expect(extractCost({ cost: 0.1 })).toBe(0.1);
     expect(extractCost({ usage: { cost: 0.08 } })).toBe(0.08);
     expect(extractCost({})).toBe(0);
+    expect(extractCost({ cost_in_usd_ticks: 1_988_000_000 })).toBeCloseTo(0.1988, 6);
+    expect(extractCost({ cost_in_usd_ticks: "1988000000" })).toBeCloseTo(0.1988, 6);
     expect(extractCostTicks({ cost_in_usd_ticks: 800_000_000 })).toBe(800_000_000);
     expect(extractCostTicks({ usage: { cost_in_usd_ticks: 400_000_000 } })).toBe(400_000_000);
     expect(extractCostTicks({ cost: 0.08 })).toBe(usdToTicks(0.08));
